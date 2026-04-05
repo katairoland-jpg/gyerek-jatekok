@@ -9,11 +9,11 @@ const H = canvas.height;
 const GRAVITY      = 0.45;
 const WHEEL_R      = 22;
 const WHEELBASE    = 76;       // keréktengelyek távolsága
-const ENGINE_FORCE = 0.58;
-const MAX_SPEED    = 13.5;
+const ENGINE_FORCE = 0.45;
+const MAX_SPEED    = 11.5;
 const TERRAIN_LEN  = 9000;
 const FINISH_X     = 8600;
-const CONSTRAINT_ITER = 8;    // megkötés iterációk száma
+const CONSTRAINT_ITER = 7;    // megkötés iterációk száma
 
 // ─── Billentyűk ───────────────────────────────────────────────────────────────
 const keys = {};
@@ -102,13 +102,13 @@ function resolveWheelTerrain(w) {
   const vy = w.y - w.py;
   const vDotN = vx * n.nx + vy * n.ny;
   if (vDotN < 0) {
-    const restitution = 0.12;
+    const restitution = 0.14;
     w.x -= (1 + restitution) * vDotN * n.nx;
     w.y -= (1 + restitution) * vDotN * n.ny;
     // Súrlódás a tangensirányban
     const tx = -n.ny, ty2 = n.nx;
     const vDotT = (w.x - w.px) * tx + (w.y - w.py) * ty2;
-    const friction = 0.86;
+    const friction = 0.83;
     w.x -= (1 - friction) * vDotT * tx;
     w.y -= (1 - friction) * vDotT * ty2;
   }
@@ -122,7 +122,7 @@ function applyWheelbaseConstraint(a, b) {
     const dy = b.y - a.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 0.001) continue;
-    const diff = (dist - WHEELBASE) / dist * 0.75;
+    const diff = (dist - WHEELBASE) / dist * 0.6;
     a.x += dx * diff;
     a.y += dy * diff;
     b.x -= dx * diff;
