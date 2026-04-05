@@ -12,7 +12,9 @@
       "Bash(git push:*)",
       "Read(//Users/judit/**)",
       "Bash(curl:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(python3 -c \"import sys,json; [print\\(f['name'], f['download_url']\\) for f in json.load\\(sys.stdin\\) if isinstance\\(f, dict\\)]\")",
+      "Bash(python3 -c \"import sys,json; [print\\(f['name'], f['download_url']\\) for f in json.load\\(sys.stdin\\)]\")"
     ]
   }
 }

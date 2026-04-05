@@ -41,6 +41,43 @@ games/<game-id>/
 - Ünneplés `GameUtils.celebrate()` siker esetén
 - Magyar szöveg mindenhol
 
+## Physics & Game Libraries (`shared/libs/`)
+
+Ezek a könyvtárak helyben elérhetők, CDN nélkül használhatók:
+
+| Fájl | Leírás | Mikor használd? |
+|------|--------|-----------------|
+| `shared/libs/matter.min.js` | **Matter.js 0.19** — 2D rigid body fizika | Alapértelmezett fizikás játékoknál: platformer, fizika puzzle, jármű |
+| `shared/libs/planck.min.js` | **Planck.js 1.0** — Box2D JS portja, pontosabb fizika | Ha precíz kerék/joint/motorkerék szimuláció kell (pl. Elasto Mania) |
+| `shared/libs/simple-physics/` | **simple-physics** referencia implementáció | Elasto Mania-szerű kerék+felfüggesztés fizika tanulmányozásához |
+
+### Beillesztés játékba
+```html
+<!-- Matter.js -->
+<script src="../../shared/libs/matter.min.js"></script>
+
+<!-- Planck.js -->
+<script src="../../shared/libs/planck.min.js"></script>
+```
+
+### simple-physics fájlok (referencia)
+```
+shared/libs/simple-physics/scripts/
+  physics.js   ← fizika motor (rugók, testek)
+  bike.js      ← kerék + váz + felfüggesztés logika
+  vector.js    ← 2D vektor műveletek
+  render.js    ← Canvas renderer
+  main.js      ← belépési pont
+```
+
+### Elasto Mania-szerű játék stack
+```
+Planck.js (fizika) + vanilla Canvas (renderer)
+```
+Kerék = `RevoluteJoint`, felfüggesztés = `PrismaticJoint` + `spring force`, pálya = `ChainShape` poligonok.
+
+---
+
 ## Meglévő játékok
 | ID | Cím | Leírás |
 |----|-----|--------|

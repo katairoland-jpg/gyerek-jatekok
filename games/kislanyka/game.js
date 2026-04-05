@@ -1,503 +1,617 @@
 // ═══════════════════════════════════════════════════════════════════════════
-//  Kislány kalandjai — két világgal
-//  Világ 1: réti futás, akadályok elkerülése (1 perc)
-//  Világ 2: erdő, szigetről szigetre ugrálás víz felett
+//  Kislány kalandjai — Kamera-követős platformer, végtelenül scrollozó világ
 // ═══════════════════════════════════════════════════════════════════════════
 
-const canvas    = document.getElementById('gameCanvas');
-const ctx       = canvas.getContext('2d');
-const overlay   = document.getElementById('overlay');
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
 const settingsOverlay = document.getElementById('settings-overlay');
 const btnAction = document.getElementById('action-btn');
 const btnSettingsStart = document.getElementById('settings-start-btn');
-const elLives   = document.getElementById('lives');
-const elScore   = document.getElementById('score');
-const elLevel   = document.getElementById('level');
+const elLives = document.getElementById('lives');
+const elScore = document.getElementById('score');
+const elLevel = document.getElementById('level');
+
+const W = canvas.width;
+const H = canvas.height;
+const GRAVITY = 0.6;
+const JUMP_FORCE = -12;
+const WALK_SPEED = 5;
+const CLIMB_SPEED = 2.5;
 
 // ─── Beállítások ────────────────────────────────────────────────────────────
 const settings = {
-  world: 1,       // 1, 2, random
-  difficulty: 'normal',  // easy, normal, hard
-  obstacles: 'all'  // all, birds, ground
+  world: '1',
+  difficulty: 'normal',
+  obstacles: 'all'
 };
 
 let difficultyMultiplier = 1.0;
-
-// ─── Konstansok ─────────────────────────────────────────────────────────────
-const W            = canvas.width;
-const H            = canvas.height;
-const GROUND       = H - 60;
-const GRAVITY      = 0.55;
-const JUMP_FORCE   = -13;
-const MOVE_SPEED   = 4.5;
-const ENV1_FRAMES  = 60 * 60;   // 1 perc @ 60fps → átmenet
+let worldType = 1;  // 1=rét, 2=erdő
 
 // ─── Játék állapot ───────────────────────────────────────────────────────────
-let state       = 'idle';   // idle | playing | transitioning | gameover
-let score       = 0;
-let lives       = 3;
-let level       = 1;
-let frameCount  = 0;
-let envFrames   = 0;        // keretek a jelenlegi világban
-let environment = 1;        // 1 = rét, 2 = erdő
-let invincible  = 0;
+let state = 'idle';
+let score = 0;
+let lives = 3;
+let level = 1;
+let frameCount = 0;
+let invincible = 0;
+let cameraX = 0;  // kamera pozíciója
+
 let animId;
 
 // ─── Billentyűk ──────────────────────────────────────────────────────────────
 const keys = {};
 window.addEventListener('keydown', e => {
   keys[e.key] = true;
-  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
 });
 window.addEventListener('keyup', e => { keys[e.key] = false; });
 
-// ─── Kislány ─────────────────────────────────────────────────────────────────
+// ─── Lány ────────────────────────────────────────────────────────────────────
 const girl = {
-  x: 120, y: GROUND,
+  x: 100,
+  y: 150,
   vy: 0,
+  vx: 0,
   onGround: true,
-  ducking: false,
+  onClimb: false,
   walkFrame: 0,
 
-  get w()   { return 36; },
-  get h()   { return this.ducking ? 38 : 68; },
+  get w() { return 36; },
+  get h() { return 68; },
   get top() { return this.y - this.h; },
 
-  reset(env) {
-    this.x       = env === 2 ? 110 : 120;
-    this.y       = GROUND;
-    this.vy      = 0;
+  reset() {
+    this.x = 100;
+    this.y = 150;
+    this.vy = 0;
+    this.vx = 0;
     this.onGround = true;
-    this.ducking  = false;
-    this.walkFrame = 0;
+    this.onClimb = false;
   },
 
   update() {
-    const maxRight = environment === 2 ? W - 20 : W / 2 - 10;
-
-    if (keys['ArrowLeft']  && this.x > 20)        this.x -= MOVE_SPEED;
-    if (keys['ArrowRight'] && this.x < maxRight)  this.x += MOVE_SPEED;
-
-    this.ducking = environment === 1 && keys['ArrowDown'] && this.onGround;
-
-    if ((keys['ArrowUp'] || keys[' ']) && this.onGround && !this.ducking) {
-      this.vy = JUMP_FORCE;
-      this.onGround = false;
-      GameUtils.playTone(520, 0.1);
-    }
-
     const prevY = this.y;
-    this.vy += GRAVITY;
-    this.y  += this.vy;
+    const prevOnGround = this.onGround;
 
-    if (environment === 1) {
-      if (this.y >= GROUND) { this.y = GROUND; this.vy = 0; this.onGround = true; }
+    // Horizontális mozgás
+    this.vx = 0;
+    if (keys['ArrowLeft']) this.vx = -WALK_SPEED;
+    if (keys['ArrowRight']) this.vx = WALK_SPEED;
+    this.x += this.vx;
+
+    // Kletternél már nem mozgunk vízszintesen így
+    if (!this.onClimb) {
+      // Normál platformer fizika
+      if ((keys['ArrowUp'] || keys[' ']) && this.onGround) {
+        this.vy = JUMP_FORCE;
+        this.onGround = false;
+        GameUtils.playTone(520, 0.1);
+      }
+
+      this.vy += GRAVITY;
+      this.y += this.vy;
+
+      // Talajhoz ütközés
+      const groundY = getGroundAt(this.x);
+      if (this.y >= groundY && prevY <= groundY) {
+        this.y = groundY;
+        this.vy = 0;
+        this.onGround = true;
+      } else if (this.y > groundY) {
+        this.y = groundY;
+        this.vy = 0;
+        this.onGround = true;
+      }
     } else {
-      this.onGround = false;
-      landOnPlatform(this, prevY);
-      if (this.y > H + 20 && !this.onGround) {
-        hit();
-        respawnOnPlatform();
+      // Kletterben
+      this.vy = 0;
+      if (keys['ArrowUp']) this.y -= CLIMB_SPEED;
+      if (keys['ArrowDown']) this.y += CLIMB_SPEED;
+
+      // Kilépni a kletterből
+      if (keys['ArrowLeft'] || keys['ArrowRight']) {
+        this.onClimb = false;
+        this.vy = 0;
       }
     }
 
-    if (this.onGround && (keys['ArrowLeft'] || keys['ArrowRight'])) {
+    // Platformokra ütközés ellenőrzése
+    checkPlatformCollisions(this, prevY);
+
+    // Mászható objektumokra
+    checkClimbCollisions(this);
+
+    // Akadályokra
+    checkObstacleCollisions(this);
+
+    // Animáció
+    if (this.vx !== 0 && this.onGround) {
       if (frameCount % 8 === 0) this.walkFrame = (this.walkFrame + 1) % 4;
     } else {
       this.walkFrame = 0;
     }
+
+    // Ha lezuhant a térképről
+    if (this.y > H + 100) {
+      hit();
+      this.y = 150;
+      this.onGround = true;
+    }
   },
 
   draw() {
+    const screenX = this.x - cameraX;
+    const screenY = this.y;
+
     ctx.save();
     if (invincible > 0 && Math.floor(invincible / 5) % 2 === 0) ctx.globalAlpha = 0.35;
-    if (this.ducking) drawGirlDucking(this.x, this.y);
-    else              drawGirl(this.x, this.y, this.walkFrame, this.vy < -2);
+
+    if (this.onClimb) {
+      drawGirlClimbing(screenX, screenY);
+    } else {
+      drawGirl(screenX, screenY, this.walkFrame, this.vy < -2, this.vx < 0);
+    }
+
     ctx.restore();
   },
 
   bbox() {
     const m = 6;
-    return { x: this.x - this.w/2 + m, y: this.top + m, w: this.w - m*2, h: this.h - m };
+    return {
+      x: this.x - this.w / 2 + m,
+      y: this.top + m,
+      w: this.w - m * 2,
+      h: this.h - m
+    };
   }
 };
 
-// ─── Kislány rajzolása ────────────────────────────────────────────────────────
-function drawGirl(x, ground, walkFrame, jumping) {
+// ─── Lány rajzolása ──────────────────────────────────────────────────────────
+function drawGirl(x, ground, walkFrame, jumping, facingLeft) {
   const py = ground;
-  const lo = [[-7,0],[7,0],[-7,5],[7,5]][walkFrame];
-  ctx.strokeStyle = '#f5a623'; ctx.lineWidth = 6; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(x-8+lo[0], py-22); ctx.lineTo(x-8+lo[0], py); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x+8-lo[0], py-22); ctx.lineTo(x+8-lo[0], py+lo[1]); ctx.stroke();
+  const dir = facingLeft ? -1 : 1;
+
+  const lo = [[-7, 0], [7, 0], [-7, 5], [7, 5]][walkFrame];
+
+  // Lábak
+  ctx.strokeStyle = '#f5a623';
+  ctx.lineWidth = 6;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x - 8 * dir + lo[0] * dir, py - 22);
+  ctx.lineTo(x - 8 * dir + lo[0] * dir, py);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + 8 * dir - lo[0] * dir, py - 22);
+  ctx.lineTo(x + 8 * dir - lo[0] * dir, py + lo[1]);
+  ctx.stroke();
+
+  // Cipők
   ctx.fillStyle = '#c0392b';
-  ctx.beginPath(); ctx.ellipse(x-8+lo[0], py,      7, 4, 0, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(x+8-lo[0], py+lo[1], 7, 4, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x - 8 * dir + lo[0] * dir, py, 7, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x + 8 * dir - lo[0] * dir, py + lo[1], 7, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Szoknya
   ctx.fillStyle = '#e74c3c';
-  ctx.beginPath(); ctx.moveTo(x-14,py-22); ctx.lineTo(x+14,py-22); ctx.lineTo(x+18,py-40); ctx.lineTo(x-18,py-40); ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x - 14 * dir, py - 22);
+  ctx.lineTo(x + 14 * dir, py - 22);
+  ctx.lineTo(x + 18 * dir, py - 40);
+  ctx.lineTo(x - 18 * dir, py - 40);
+  ctx.closePath();
+  ctx.fill();
+
+  // Felső test
   ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.roundRect(x-11, py-58, 22, 20, 4); ctx.fill();
-  const armAngle = jumping ? -0.8 : (walkFrame%2===0 ? 0.3 : -0.3);
-  ctx.strokeStyle = '#fde3a7'; ctx.lineWidth = 5;
-  ctx.beginPath(); ctx.moveTo(x-11, py-54); ctx.lineTo(x-20, py-54+Math.sin(armAngle)*16); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x+11, py-54); ctx.lineTo(x+20, py-54-Math.sin(armAngle)*16); ctx.stroke();
-  ctx.fillStyle = '#fde3a7'; ctx.beginPath(); ctx.arc(x, py-67, 13, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath();
+  ctx.roundRect(x - 11 * dir, py - 58, 22 * dir, 20, 4);
+  ctx.fill();
+
+  // Karok
+  const armAngle = jumping ? -0.8 : (walkFrame % 2 === 0 ? 0.3 : -0.3);
+  ctx.strokeStyle = '#fde3a7';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(x - 11 * dir, py - 54);
+  ctx.lineTo(x - 20 * dir, py - 54 + Math.sin(armAngle) * 16 * dir);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + 11 * dir, py - 54);
+  ctx.lineTo(x + 20 * dir, py - 54 - Math.sin(armAngle) * 16 * dir);
+  ctx.stroke();
+
+  // Fej
+  ctx.fillStyle = '#fde3a7';
+  ctx.beginPath();
+  ctx.arc(x, py - 67, 13, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Haj
   ctx.fillStyle = '#8B4513';
-  ctx.beginPath(); ctx.arc(x,    py-72, 13, Math.PI, 0); ctx.fill();
-  ctx.beginPath(); ctx.arc(x-16, py-68,  6, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x+16, py-68,  6, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x, py - 72, 13, Math.PI, 0);
+  ctx.fill();
+
+  // Copfok
+  ctx.beginPath();
+  ctx.arc(x - 16 * dir, py - 68, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + 16 * dir, py - 68, 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Szalagok
   ctx.fillStyle = '#e74c3c';
-  ctx.beginPath(); ctx.arc(x-16, py-68, 4, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x+16, py-68, 4, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x - 16 * dir, py - 68, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + 16 * dir, py - 68, 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Arc
   ctx.fillStyle = '#333';
-  ctx.beginPath(); ctx.arc(x-4, py-67, 2, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x+4, py-67, 2, 0, Math.PI*2); ctx.fill();
-  ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.arc(x, py-64, 4, 0.2, Math.PI-0.2); ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x - 4 * dir, py - 67, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + 4 * dir, py - 67, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = '#c0392b';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(x, py - 64, 4, 0.2, Math.PI - 0.2);
+  ctx.stroke();
 }
 
-function drawGirlDucking(x, ground) {
-  const py = ground;
-  ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.ellipse(x, py-18, 20, 16, 0, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#fff';    ctx.beginPath(); ctx.roundRect(x-10, py-34, 20, 14, 4); ctx.fill();
-  ctx.fillStyle = '#fde3a7'; ctx.beginPath(); ctx.arc(x+10, py-38, 11, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#8B4513'; ctx.beginPath(); ctx.arc(x+10, py-42, 11, Math.PI, 0); ctx.fill();
-  ctx.beginPath(); ctx.arc(x+24, py-38, 5, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(x+24, py-38, 3, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#333';    ctx.beginPath(); ctx.arc(x+14, py-38, 1.5, 0, Math.PI*2); ctx.fill();
-  ctx.strokeStyle = '#f5a623'; ctx.lineWidth = 6; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(x-5, py-6); ctx.lineTo(x-18, py); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x+5, py-6); ctx.lineTo(x+18, py); ctx.stroke();
-  ctx.fillStyle = '#c0392b';
-  ctx.beginPath(); ctx.ellipse(x-18, py, 7, 4, 0, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(x+18, py, 7, 4, 0, 0, Math.PI*2); ctx.fill();
+function drawGirlClimbing(x, y) {
+  const py = y;
+
+  // Test felülről nézve
+  ctx.fillStyle = '#e74c3c';
+  ctx.beginPath();
+  ctx.roundRect(x - 10, py - 48, 20, 28, 4);
+  ctx.fill();
+
+  // Kar fel
+  ctx.strokeStyle = '#fde3a7';
+  ctx.lineWidth = 5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x - 10, py - 40);
+  ctx.lineTo(x - 18, py - 58);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + 10, py - 40);
+  ctx.lineTo(x + 18, py - 58);
+  ctx.stroke();
+
+  // Fej
+  ctx.fillStyle = '#fde3a7';
+  ctx.beginPath();
+  ctx.arc(x, py - 60, 10, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#8B4513';
+  ctx.beginPath();
+  ctx.arc(x, py - 65, 10, Math.PI, 0);
+  ctx.fill();
+
+  // Szemek
+  ctx.fillStyle = '#333';
+  ctx.beginPath();
+  ctx.arc(x - 3, py - 60, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + 3, py - 60, 1.5, 0, Math.PI * 2);
+  ctx.fill();
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-//  VILÁG 1 — Rét
-// ════════════════════════════════════════════════════════════════════════════
+// ─── Platformok ──────────────────────────────────────────────────────────────
+let platforms = [];
+let obstacles = [];
+let climbObjects = [];
+let nextSpawnX = 0;
 
-let obstacles      = [];
-let nextObstacleIn = 90;
-
-const OBSTACLE_TYPES = [
-  {
-    id:'ko', w:38, h:30, yOffset:0,
-    draw(ctx,x,y){
-      ctx.fillStyle='#7f8c8d'; ctx.beginPath(); ctx.ellipse(x,y-15,19,15,0,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle='#95a5a6'; ctx.beginPath(); ctx.ellipse(x-4,y-20,8,6,-0.3,0,Math.PI*2); ctx.fill();
-    }
-  },
-  {
-    id:'bokor', w:50, h:48, yOffset:0,
-    draw(ctx,x,y){
-      ctx.fillStyle='#6b4226'; ctx.fillRect(x-4,y-14,8,14);
-      ctx.fillStyle='#27ae60';
-      ctx.beginPath(); ctx.arc(x,   y-36,18,0,Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(x-14,y-28,14,0,Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(x+14,y-28,14,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle='#2ecc71'; ctx.beginPath(); ctx.arc(x,y-40,10,0,Math.PI*2); ctx.fill();
-    }
-  },
-  {
-    id:'madar', w:44, h:20, yOffset:80,
-    draw(ctx,x,y){
-      ctx.strokeStyle='#2c3e50'; ctx.lineWidth=3; ctx.lineCap='round';
-      ctx.beginPath(); ctx.moveTo(x-18,y); ctx.quadraticCurveTo(x-9,y-10,x,y); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x,y);    ctx.quadraticCurveTo(x+9,y-10,x+18,y); ctx.stroke();
-      ctx.fillStyle='#e74c3c'; ctx.beginPath(); ctx.arc(x+19,y-2,3,0,Math.PI*2); ctx.fill();
-    }
-  },
-  {
-    id:'keritas', w:30, h:52, yOffset:0,
-    draw(ctx,x,y){
-      ctx.fillStyle='#d4a96a';
-      for(let i=-1;i<=1;i++){
-        const px=x+i*14;
-        ctx.beginPath(); ctx.moveTo(px-5,y); ctx.lineTo(px-5,y-44); ctx.lineTo(px,y-52); ctx.lineTo(px+5,y-44); ctx.lineTo(px+5,y); ctx.closePath(); ctx.fill();
-        ctx.strokeStyle='#b8864e'; ctx.lineWidth=1; ctx.stroke();
-      }
-      ctx.fillStyle='#d4a96a'; ctx.fillRect(x-20,y-36,40,7); ctx.fillRect(x-20,y-20,40,7);
-    }
-  }
-];
-
-function spawnObstacle() {
-  let availableTypes = OBSTACLE_TYPES;
-  if (settings.obstacles === 'birds') {
-    availableTypes = OBSTACLE_TYPES.filter(t => t.id === 'madar');
-  } else if (settings.obstacles === 'ground') {
-    availableTypes = OBSTACLE_TYPES.filter(t => t.id !== 'madar');
-  }
-
-  if (availableTypes.length === 0) availableTypes = OBSTACLE_TYPES;
-  const type = GameUtils.pick(availableTypes);
-  const baseSpeed = 3.5 + (level-1)*0.4 + Math.random()*0.8;
-  const speed = baseSpeed * difficultyMultiplier;
-  obstacles.push({ type, x: W + type.w, y: GROUND - type.yOffset, speed });
-}
-
-function updateObstacles() {
-  if (--nextObstacleIn <= 0) {
-    spawnObstacle();
-    nextObstacleIn = Math.max(55, 110 - level*7) + Math.floor(Math.random()*50);
-  }
-  for (const o of obstacles) o.x -= o.speed;
-  obstacles = obstacles.filter(o => o.x > -80);
-}
-
-let bgOffset = 0;
-const clouds = Array.from({length:5}, (_,i) => ({
-  x: 80+i*160, y: 30+Math.random()*50, r: 22+Math.random()*18, speed: 0.3+Math.random()*0.2
-}));
-
-function drawBg1() {
-  const sky = ctx.createLinearGradient(0,0,0,GROUND);
-  sky.addColorStop(0,'#87ceeb'); sky.addColorStop(1,'#d6f0ff');
-  ctx.fillStyle = sky; ctx.fillRect(0,0,W,H);
-
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  for (const c of clouds) {
-    ctx.beginPath(); ctx.arc(c.x,c.y,c.r,0,Math.PI*2); ctx.fill();
-    ctx.arc(c.x+c.r*0.7,c.y+6,c.r*0.7,0,Math.PI*2); ctx.fill();
-    ctx.arc(c.x-c.r*0.6,c.y+8,c.r*0.6,0,Math.PI*2); ctx.fill();
-    c.x -= c.speed; if(c.x < -80) c.x = W+80;
-  }
-
-  ctx.fillStyle = '#5dbb63'; ctx.fillRect(0,GROUND,W,H-GROUND);
-  ctx.fillStyle = '#4caf50'; ctx.fillRect(0,GROUND,W,6);
-
-  ctx.strokeStyle = '#388e3c'; ctx.lineWidth = 2;
-  bgOffset = (bgOffset + 1.5) % 40;
-  for (let gx=-bgOffset; gx<W; gx+=40) {
-    ctx.beginPath(); ctx.moveTo(gx,GROUND+3); ctx.lineTo(gx+6,GROUND-4); ctx.lineTo(gx+12,GROUND+3); ctx.stroke();
-  }
-}
-
-function checkObstacleCollisions() {
-  if (invincible > 0) return;
-  const gb = girl.bbox();
-  for (const obs of obstacles) {
-    const ob = { x: obs.x-obs.type.w/2+6, y: obs.y-obs.type.h+6, w: obs.type.w-12, h: obs.type.h-6 };
-    if (gb.x < ob.x+ob.w && gb.x+gb.w > ob.x && gb.y < ob.y+ob.h && gb.y+gb.h > ob.y) { hit(); return; }
-  }
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-//  VILÁG 2 — Erdő / Víz
-// ════════════════════════════════════════════════════════════════════════════
-
-let platforms      = [];
-let nextPlatX      = 0;   // a következő platform X pozíciója
-let waterOffset    = 0;
-let forestBirds    = [];
-let nextBirdIn     = 180;
-
-// Háttérfák (parallax)
-const bgTrees = Array.from({length: 14}, (_,i) => ({
-  x: i * 60 + Math.random()*30,
-  h: 90 + Math.random()*80,
-  w: 18 + Math.random()*14,
-  dark: Math.random() < 0.4,
-  speed: 0.6 + Math.random()*0.3
-}));
-
-function initEnv2() {
+function generateLevel() {
   platforms = [];
-  forestBirds = [];
-  nextBirdIn = 180;
-  // Első nagy induló sziget
-  platforms.push({ x: 0, y: GROUND, w: 200 });
-  // Pár előre generált platform
-  let curX = 220;
-  for (let i = 0; i < 6; i++) {
-    const w = 90 + Math.random()*90;
-    platforms.push({ x: curX, y: GROUND, w });
-    curX += w + 100 + Math.random()*60;
-  }
-  nextPlatX = curX;
-  girl.reset(2);
-  girl.x = 100;
-  girl.y = GROUND;
-}
+  obstacles = [];
+  climbObjects = [];
+  nextSpawnX = 200;
 
-function getPlatSpeed() {
-  const baseSpeed = 2.2 + (level - 1) * 0.3;
-  return baseSpeed * difficultyMultiplier;
-}
+  // Kezdeti platform
+  platforms.push({ x: 0, y: 180, w: 200 });
 
-function updatePlatforms() {
-  const spd = getPlatSpeed();
-
-  // Mozgasd a platformokat
-  for (const p of platforms) p.x -= spd;
-  nextPlatX -= spd;
-
-  // Töröld a képernyőn kívülieket
-  platforms = platforms.filter(p => p.x + p.w > -20);
-
-  // Generálj újakat
-  while (nextPlatX < W + 300) {
-    const w = 90 + Math.random()*100;
-    platforms.push({ x: nextPlatX, y: GROUND, w });
-    nextPlatX += w + 100 + Math.random()*70;
+  // Előre generálunk
+  for (let i = 0; i < 30; i++) {
+    spawnNextSection();
   }
 }
 
-function landOnPlatform(g, prevY) {
+function spawnNextSection() {
+  const gap = 80 + Math.random() * 80;
+  const x = nextSpawnX + gap;
+  const w = 80 + Math.random() * 120;
+  const y = 140 + Math.random() * 120;
+
+  platforms.push({ x, y, w });
+
+  // Akadályok
+  if (Math.random() < 0.4) {
+    const obsX = x + w / 2;
+    const obsY = y - 60;
+    const obsType = spawnObstacle(obsX, obsY);
+  }
+
+  // Mászható falak
+  if (Math.random() < 0.35 && settings.obstacles === 'all') {
+    climbObjects.push({
+      x: x + w / 2,
+      y: y - 100,
+      w: 24,
+      h: 80
+    });
+  }
+
+  nextSpawnX = x + w;
+}
+
+function spawnObstacle(x, y) {
+  let types = [];
+  if (settings.obstacles !== 'birds') types.push('ground');
+  if (settings.obstacles !== 'ground') types.push('bird');
+
+  if (types.length === 0) types = ['ground', 'bird'];
+
+  const type = GameUtils.pick(types);
+  const speed = (2 + Math.random() * 1.5) * difficultyMultiplier;
+
+  if (type === 'ground') {
+    obstacles.push({ type: 'rock', x, y, w: 35, h: 25, speed });
+  } else {
+    obstacles.push({ type: 'bird', x, y, vx: -speed });
+  }
+}
+
+function getGroundAt(x) {
   for (const p of platforms) {
-    if (g.x + 14 < p.x + 4 || g.x - 14 > p.x + p.w - 4) continue;
-    if (prevY <= p.y + 2 && g.y >= p.y && g.vy >= 0) {
-      g.y = p.y;
+    if (x > p.x - 20 && x < p.x + p.w + 20) {
+      return p.y;
+    }
+  }
+  return H + 50;  // Nem lezuhani egyből
+}
+
+function checkPlatformCollisions(g, prevY) {
+  const gb = g.bbox();
+  for (const p of platforms) {
+    if (gb.x + gb.w < p.x || gb.x > p.x + p.w) continue;
+
+    if (prevY + g.h <= p.y + 5 && g.y + g.h >= p.y && g.vy >= 0) {
+      g.y = p.y - g.h;
       g.vy = 0;
       g.onGround = true;
       return;
     }
   }
+  g.onGround = false;
 }
 
-function respawnOnPlatform() {
-  invincible = 100;
-  const visible = platforms.filter(p => p.x > 30 && p.x < W * 0.6);
-  if (visible.length > 0) {
-    const p = visible.reduce((a,b) => a.x < b.x ? a : b);
-    girl.x = p.x + p.w / 2;
-    girl.y = p.y;
-  } else {
-    girl.x = 80; girl.y = GROUND;
+function checkClimbCollisions(g) {
+  for (const c of climbObjects) {
+    if (g.x > c.x - c.w / 2 - 10 && g.x < c.x + c.w / 2 + 10 &&
+        g.y - g.h < c.y + c.h && g.y > c.y - 40) {
+      if (keys['ArrowUp']) {
+        g.onClimb = true;
+        g.onGround = false;
+        g.vy = 0;
+      }
+    }
   }
-  girl.vy = 0; girl.onGround = true;
 }
 
-function spawnForestBird() {
-  forestBirds.push({
-    x: W + 30,
-    y: GROUND - 80 - Math.random() * 60,
-    speed: 2.5 + Math.random() * 1.5
-  });
-}
-
-function updateForestBirds() {
-  if (--nextBirdIn <= 0) {
-    spawnForestBird();
-    nextBirdIn = 140 + Math.floor(Math.random() * 100);
-  }
-  for (const b of forestBirds) b.x -= b.speed;
-  forestBirds = forestBirds.filter(b => b.x > -50);
-}
-
-function checkBirdCollisions() {
+function checkObstacleCollisions(g) {
   if (invincible > 0) return;
-  const gb = girl.bbox();
-  for (const b of forestBirds) {
-    if (gb.x < b.x+20 && gb.x+gb.w > b.x-20 && gb.y < b.y+12 && gb.y+gb.h > b.y-12) {
+
+  const gb = g.bbox();
+  for (const o of obstacles) {
+    let hit = false;
+
+    if (o.type === 'rock') {
+      if (gb.x < o.x + o.w && gb.x + gb.w > o.x &&
+          gb.y < o.y + o.h && gb.y + gb.h > o.y) {
+        hit = true;
+      }
+    } else if (o.type === 'bird') {
+      if (gb.x < o.x + 20 && gb.x + gb.w > o.x - 20 &&
+          gb.y < o.y + 12 && gb.y + gb.h > o.y - 12) {
+        hit = true;
+      }
+    }
+
+    if (hit) {
       hit();
       return;
     }
   }
 }
 
-function drawIsland(p) {
-  const cx = p.x + p.w / 2;
-  // Föld
-  ctx.fillStyle = '#5d4037';
-  ctx.beginPath(); ctx.ellipse(cx, p.y + 14, p.w/2 + 4, 14, 0, 0, Math.PI*2); ctx.fill();
-  // Fű
-  ctx.fillStyle = '#388e3c';
-  ctx.beginPath(); ctx.ellipse(cx, p.y, p.w/2 + 2, 9, 0, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#4caf50';
-  ctx.beginPath(); ctx.ellipse(cx, p.y - 3, p.w/2, 7, 0, 0, Math.PI*2); ctx.fill();
-  // Fűcsíkok
-  ctx.strokeStyle = '#2e7d32'; ctx.lineWidth = 2;
-  for (let gx = p.x + 12; gx < p.x + p.w - 12; gx += 18) {
-    ctx.beginPath(); ctx.moveTo(gx,   p.y - 3); ctx.lineTo(gx - 4, p.y - 11); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(gx+6, p.y - 3); ctx.lineTo(gx + 10, p.y - 10); ctx.stroke();
-  }
-  // Kis fa a szigeten (csak ha elég széles)
-  if (p.w > 130) {
-    const tx = p.x + p.w * 0.72;
-    drawSmallTree(tx, p.y);
+// ─── Háttér rajzolása ────────────────────────────────────────────────────────
+function drawBackground() {
+  if (worldType === 1) {
+    drawBgMeadow();
+  } else {
+    drawBgForest();
   }
 }
 
-function drawSmallTree(x, ground) {
-  ctx.fillStyle = '#4e342e';
-  ctx.fillRect(x - 4, ground - 42, 8, 42);
-  ctx.fillStyle = '#2e7d32';
-  ctx.beginPath(); ctx.arc(x,    ground-52, 18, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x-10, ground-44, 13, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x+10, ground-44, 13, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#388e3c';
-  ctx.beginPath(); ctx.arc(x, ground-58, 11, 0, Math.PI*2); ctx.fill();
-}
+function drawBgMeadow() {
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#87ceeb');
+  sky.addColorStop(1, '#d6f0ff');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H);
 
-function drawBird2(b) {
-  ctx.strokeStyle = '#1a237e'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(b.x-14,b.y); ctx.quadraticCurveTo(b.x-7,b.y-8,b.x,b.y); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(b.x,   b.y); ctx.quadraticCurveTo(b.x+7,b.y-8,b.x+14,b.y); ctx.stroke();
-}
-
-function drawBg2() {
-  // Égbolt - erdős
-  const sky = ctx.createLinearGradient(0,0,0,GROUND);
-  sky.addColorStop(0, '#1b5e20');
-  sky.addColorStop(0.5,'#388e3c');
-  sky.addColorStop(1,  '#a5d6a7');
-  ctx.fillStyle = sky; ctx.fillRect(0,0,W,H);
-
-  // Háttérfák (parallax)
-  for (const t of bgTrees) {
-    ctx.fillStyle = t.dark ? '#1a3a1a' : '#2d5a27';
-    const tx = t.x;
-    // törzs
-    ctx.fillRect(tx - t.w/4, GROUND - t.h, t.w/2, t.h);
-    // lombkorona
-    ctx.beginPath(); ctx.arc(tx, GROUND - t.h - t.w*0.8, t.w*0.9, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(tx - t.w*0.6, GROUND - t.h - t.w*0.3, t.w*0.7, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(tx + t.w*0.6, GROUND - t.h - t.w*0.3, t.w*0.7, 0, Math.PI*2); ctx.fill();
-    t.x -= t.speed; if (t.x < -60) t.x = W + 60;
-  }
-
-  // Víz
-  waterOffset = (waterOffset + 1) % 60;
-  const waterTop = GROUND + 4;
-  const waterGrad = ctx.createLinearGradient(0, waterTop, 0, H);
-  waterGrad.addColorStop(0, '#0288d1');
-  waterGrad.addColorStop(1, '#01579b');
-  ctx.fillStyle = waterGrad;
-  ctx.fillRect(0, waterTop, W, H - waterTop);
-
-  // Hullámok
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2;
-  for (let row = 0; row < 3; row++) {
+  // Felhők parallax
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  for (let cx = -cameraX * 0.2 % 300; cx < W; cx += 300) {
     ctx.beginPath();
-    for (let wx = -waterOffset; wx < W + 20; wx += 60) {
-      const wy = waterTop + 8 + row * 14;
-      ctx.moveTo(wx, wy);
-      ctx.quadraticCurveTo(wx + 15, wy - 5, wx + 30, wy);
-      ctx.quadraticCurveTo(wx + 45, wy + 5, wx + 60, wy);
-    }
-    ctx.stroke();
-  }
-
-  // Víztükör fénycsíkok
-  ctx.fillStyle = 'rgba(255,255,255,0.08)';
-  for (let i = 0; i < 5; i++) {
-    const lx = ((i * 137 + waterOffset * 2) % W);
-    ctx.beginPath();
-    ctx.ellipse(lx, waterTop + 20, 30, 4, 0.2, 0, Math.PI*2);
+    ctx.arc(cx, 40, 25, 0, Math.PI * 2);
+    ctx.arc(cx + 35, 50, 20, 0, Math.PI * 2);
+    ctx.arc(cx - 35, 50, 18, 0, Math.PI * 2);
     ctx.fill();
   }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-//  Közös logika
-// ════════════════════════════════════════════════════════════════════════════
+function drawBgForest() {
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#1b5e20');
+  sky.addColorStop(1, '#4caf50');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H);
 
+  // Háttérfák
+  ctx.fillStyle = '#1a3a1a';
+  for (let tx = -cameraX * 0.4 % 400; tx < W + 400; tx += 400) {
+    ctx.beginPath();
+    ctx.arc(tx, 80, 40, 0, Math.PI * 2);
+    ctx.arc(tx - 50, 110, 30, 0, Math.PI * 2);
+    ctx.arc(tx + 50, 110, 30, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// ─── Platformok rajzolása ────────────────────────────────────────────────────
+function drawPlatforms() {
+  for (const p of platforms) {
+    const sx = p.x - cameraX;
+    if (sx + p.w < 0 || sx > W) continue;
+
+    // Platform
+    ctx.fillStyle = '#5d4037';
+    ctx.fillRect(sx, p.y, p.w, 20);
+
+    // Fű teteje
+    ctx.fillStyle = '#4caf50';
+    ctx.fillRect(sx, p.y - 6, p.w, 6);
+
+    // Dekoráció
+    ctx.fillStyle = '#2e7d32';
+    for (let gx = sx + 20; gx < sx + p.w; gx += 40) {
+      ctx.beginPath();
+      ctx.moveTo(gx, p.y);
+      ctx.lineTo(gx - 4, p.y - 8);
+      ctx.lineTo(gx + 8, p.y - 4);
+      ctx.stroke();
+    }
+  }
+}
+
+// ─── Akadályok rajzolása ─────────────────────────────────────────────────────
+function drawObstacles() {
+  for (const o of obstacles) {
+    const sx = o.x - cameraX;
+    if (sx + 40 < 0 || sx > W) continue;
+
+    if (o.type === 'rock') {
+      ctx.fillStyle = '#7f8c8d';
+      ctx.beginPath();
+      ctx.ellipse(sx, o.y, o.w / 2, o.h / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#95a5a6';
+      ctx.beginPath();
+      ctx.ellipse(sx - 4, o.y - 8, 6, 4, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (o.type === 'bird') {
+      ctx.strokeStyle = '#2c3e50';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(sx - 14, o.y);
+      ctx.quadraticCurveTo(sx - 7, o.y - 8, sx, o.y);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(sx, o.y);
+      ctx.quadraticCurveTo(sx + 7, o.y - 8, sx + 14, o.y);
+      ctx.stroke();
+
+      ctx.fillStyle = '#e74c3c';
+      ctx.beginPath();
+      ctx.arc(sx + 15, o.y - 2, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+// ─── Mászható falak ──────────────────────────────────────────────────────────
+function drawClimbObjects() {
+  for (const c of climbObjects) {
+    const sx = c.x - cameraX;
+    if (sx + c.w < 0 || sx > W) continue;
+
+    ctx.fillStyle = '#8B4513';
+    ctx.fillRect(sx - c.w / 2, c.y, c.w, c.h);
+
+    // Kötél csíkok
+    ctx.strokeStyle = '#d4a96a';
+    ctx.lineWidth = 2;
+    for (let cy = c.y; cy < c.y + c.h; cy += 16) {
+      ctx.beginPath();
+      ctx.moveTo(sx - c.w / 2, cy);
+      ctx.lineTo(sx + c.w / 2, cy);
+      ctx.stroke();
+    }
+  }
+}
+
+// ─── Kamera követés ──────────────────────────────────────────────────────────
+function updateCamera() {
+  const targetCameraX = girl.x - W / 3;
+  cameraX += (targetCameraX - cameraX) * 0.1;  // smooth
+  cameraX = Math.max(0, cameraX);
+}
+
+// ─── Game loop ───────────────────────────────────────────────────────────────
+function loop() {
+  if (state !== 'playing') return;
+  frameCount++;
+
+  // Világ generálása ha szükséges
+  while (nextSpawnX < cameraX + W + 500) {
+    spawnNextSection();
+  }
+
+  // Rajzolás
+  drawBackground();
+  drawPlatforms();
+  drawClimbObjects();
+  drawObstacles();
+
+  girl.update();
+  girl.draw();
+
+  if (invincible > 0) invincible--;
+
+  updateScore();
+  updateCamera();
+
+  animId = requestAnimationFrame(loop);
+}
+
+// ─── Közös függvények ────────────────────────────────────────────────────────
 function hit() {
   if (invincible > 0) return;
   lives--;
   elLives.textContent = lives;
-  invincible = 90;
+  invincible = 100;
   GameUtils.playError();
   if (lives <= 0) endGame();
 }
@@ -506,7 +620,7 @@ function updateScore() {
   if (frameCount % 6 === 0) {
     score++;
     elScore.textContent = score;
-    const newLevel = Math.floor(score / 80) + 1;
+    const newLevel = Math.floor(score / 100) + 1;
     if (newLevel !== level) {
       level = newLevel;
       elLevel.textContent = level;
@@ -515,146 +629,45 @@ function updateScore() {
   }
 }
 
-// ─── Átmenet 1 → 2 ──────────────────────────────────────────────────────────
-let transAlpha  = 0;
-let transPhase  = 0;  // 0=fade in, 1=megállás, 2=fade out
-let transTimer  = 0;
-
-function startTransition() {
-  state = 'transitioning';
-  transAlpha = 0; transPhase = 0; transTimer = 0;
-  cancelAnimationFrame(animId);
-  transitionLoop();
-}
-
-function transitionLoop() {
-  // Rajzold le az aktuális hátteret alá
-  drawBg1();
-
-  // Zöld átmeneti overlay
-  ctx.fillStyle = `rgba(27,94,32,${transAlpha})`;
-  ctx.fillRect(0, 0, W, H);
-
-  if (transAlpha >= 0.92) {
-    // Szöveg
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 38px Nunito, cursive';
-    ctx.textAlign = 'center';
-    ctx.fillText('🌲 Erdős kaland! 🌲', W/2, H/2 - 20);
-    ctx.font = '22px Nunito, cursive';
-    ctx.fillText('Ugorj szigetről szigetre!', W/2, H/2 + 22);
-    ctx.textAlign = 'left';
-  }
-
-  // Fázis logika
-  transTimer++;
-  if (transPhase === 0) {
-    transAlpha = Math.min(0.98, transAlpha + 0.035);
-    if (transAlpha >= 0.98) { transPhase = 1; transTimer = 0; }
-  } else if (transPhase === 1) {
-    if (transTimer > 90) {
-      transPhase = 2;
-      // Inicializáljuk a 2. világot
-      environment = 2;
-      envFrames   = 0;
-      initEnv2();
-    }
-  } else {
-    transAlpha = Math.max(0, transAlpha - 0.04);
-    if (transAlpha <= 0) {
-      state = 'playing';
-      loop();
-      return;
-    }
-  }
-
-  animId = requestAnimationFrame(transitionLoop);
-}
-
-// ─── Game loop ────────────────────────────────────────────────────────────────
-function loop() {
-  if (state !== 'playing') return;
-  frameCount++;
-  envFrames++;
-
-  if (environment === 1) {
-    drawBg1();
-    updateObstacles();
-    for (const obs of obstacles) { ctx.save(); obs.type.draw(ctx, obs.x, obs.y); ctx.restore(); }
-    girl.update();
-    checkObstacleCollisions();
-
-    // 1 perc letelt → átmenet
-    if (envFrames >= ENV1_FRAMES && lives > 0) {
-      girl.draw();
-      updateScore();
-      startTransition();
-      return;
-    }
-  } else {
-    drawBg2();
-    updatePlatforms();
-    for (const p of platforms) drawIsland(p);
-    updateForestBirds();
-    for (const b of forestBirds) drawBird2(b);
-    girl.update();
-    checkBirdCollisions();
-  }
-
-  if (invincible > 0) invincible--;
-  girl.draw();
-  updateScore();
-
-  animId = requestAnimationFrame(loop);
-}
-
-// ─── Overlay / Start / End ───────────────────────────────────────────────────
-function showOverlay(emoji, title, sub, btnText) {
-  document.getElementById('overlay-emoji').textContent = emoji;
-  document.getElementById('overlay-title').textContent = title;
-  document.getElementById('overlay-sub').innerHTML = sub;
-  btnAction.textContent = btnText;
-  overlay.classList.remove('hidden');
-}
-
 function applyDifficulty() {
-  switch(settings.difficulty) {
+  switch (settings.difficulty) {
     case 'easy':
-      difficultyMultiplier = 0.65;
+      difficultyMultiplier = 0.6;
       break;
     case 'normal':
       difficultyMultiplier = 1.0;
       break;
     case 'hard':
-      difficultyMultiplier = 1.4;
+      difficultyMultiplier = 1.5;
       break;
   }
 }
 
 function startGame() {
   cancelAnimationFrame(animId);
-  score = 0; lives = 3; level = 1; frameCount = 0; envFrames = 0;
-  invincible = 0;
 
-  // Világ választása
+  // Beállítások alkalmazása
   if (settings.world === 'random') {
-    environment = Math.random() < 0.5 ? 1 : 2;
+    worldType = Math.random() < 0.5 ? 1 : 2;
   } else {
-    environment = parseInt(settings.world);
+    worldType = parseInt(settings.world);
   }
 
   applyDifficulty();
 
-  obstacles = []; nextObstacleIn = 90;
-  platforms = []; forestBirds = [];
-  elScore.textContent = 0; elLives.textContent = 3; elLevel.textContent = 1;
+  score = 0;
+  lives = 3;
+  level = 1;
+  frameCount = 0;
+  invincible = 0;
+  cameraX = 0;
 
-  if (environment === 1) {
-    girl.reset(1);
-  } else {
-    girl.reset(2);
-    initEnv2();
-  }
+  elScore.textContent = 0;
+  elLives.textContent = 3;
+  elLevel.textContent = 1;
+
+  girl.reset();
+  generateLevel();
 
   settingsOverlay.classList.add('hidden');
   overlay.classList.add('hidden');
@@ -666,13 +679,19 @@ function endGame() {
   state = 'gameover';
   cancelAnimationFrame(animId);
   setTimeout(() => {
-    const vilag = environment === 2 ? ' (eljutottál az erdőbe! 🌲)' : '';
-    showOverlay('😢', 'Játék vége!',
-      `Elértél <strong>${score}</strong> pontot!${vilag}<br>Próbáld újra!`,
-      'Újra játszom');
+    showOverlay('😢', 'Játék vége!', `Elértél <strong>${score}</strong> pontot!<br>Világod: ${worldType === 1 ? '🌾 Rét' : '🌲 Erdő'}<br>Próbáld újra!`, 'Beállítások');
   }, 400);
 }
 
+function showOverlay(emoji, title, sub, btnText) {
+  document.getElementById('overlay-emoji').textContent = emoji;
+  document.getElementById('overlay-title').textContent = title;
+  document.getElementById('overlay-sub').innerHTML = sub;
+  btnAction.textContent = btnText;
+  overlay.classList.remove('hidden');
+}
+
+// ─── Beállítások UI ──────────────────────────────────────────────────────────
 btnAction.addEventListener('click', () => {
   overlay.classList.add('hidden');
   settingsOverlay.classList.remove('hidden');
@@ -680,24 +699,22 @@ btnAction.addEventListener('click', () => {
 
 btnSettingsStart.addEventListener('click', startGame);
 
-// Beállítások gombok kezelése
 document.querySelectorAll('.btn-option').forEach(btn => {
   btn.addEventListener('click', (e) => {
     const setting = e.target.dataset.setting;
     const value = e.target.dataset.value;
 
-    // Törlij az aktív osztályt az ugyanazon beállítás többi gomb közül
     document.querySelectorAll(`.btn-option[data-setting="${setting}"]`).forEach(b => {
       b.classList.remove('active');
     });
 
-    // Adjuk meg az aktív osztályt a kattintott gombnak
     e.target.classList.add('active');
     settings[setting] = value;
   });
 });
 
-showOverlay('🌟', 'Kislány kalandjai', 'Nyilakkal irányítsd a kislányt,<br>kerüld el az akadályokat!', 'Beállítások');
+showOverlay('🌟', 'Kislány kalandjai', 'Nyilakkal irányítsd a kislányt,<br>ugorj platformokról platformra!', 'Beállítások');
+
 window.addEventListener('keydown', e => {
   if (e.key === ' ' && state === 'idle') {
     overlay.classList.add('hidden');
