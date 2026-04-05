@@ -599,11 +599,12 @@ function showOverlay(emoji, title, sub, btnText) {
 function startGame() {
   cancelAnimationFrame(animId);
   score = 0; lives = 3; level = 1; frameCount = 0; envFrames = 0;
-  invincible = 0; environment = 1;
+  invincible = 0; environment = 2;
   obstacles = []; nextObstacleIn = 90;
   platforms = []; forestBirds = [];
   elScore.textContent = 0; elLives.textContent = 3; elLevel.textContent = 1;
-  girl.reset(1);
+  girl.reset(2);
+  initEnv2();
   overlay.classList.add('hidden');
   state = 'playing';
   loop();
