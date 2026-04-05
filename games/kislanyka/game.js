@@ -673,8 +673,39 @@ function endGame() {
   }, 400);
 }
 
-btnAction.addEventListener('click', startGame);
-showOverlay('🌟', 'Kislány kalandjai', 'Nyilakkal irányítsd a kislányt,<br>kerüld el az akadályokat!', 'Játék indítása');
+btnAction.addEventListener('click', () => {
+  overlay.classList.add('hidden');
+  settingsOverlay.classList.remove('hidden');
+});
+
+btnSettingsStart.addEventListener('click', startGame);
+
+// Beállítások gombok kezelése
+document.querySelectorAll('.btn-option').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    const setting = e.target.dataset.setting;
+    const value = e.target.dataset.value;
+
+    // Törlij az aktív osztályt az ugyanazon beállítás többi gomb közül
+    document.querySelectorAll(`.btn-option[data-setting="${setting}"]`).forEach(b => {
+      b.classList.remove('active');
+    });
+
+    // Adjuk meg az aktív osztályt a kattintott gombnak
+    e.target.classList.add('active');
+    settings[setting] = value;
+  });
+});
+
+showOverlay('🌟', 'Kislány kalandjai', 'Nyilakkal irányítsd a kislányt,<br>kerüld el az akadályokat!', 'Beállítások');
 window.addEventListener('keydown', e => {
-  if (e.key === ' ' && (state === 'idle' || state === 'gameover')) startGame();
+  if (e.key === ' ' && state === 'idle') {
+    overlay.classList.add('hidden');
+    settingsOverlay.classList.remove('hidden');
+  }
+  if (e.key === ' ' && state === 'gameover') {
+    overlay.classList.remove('hidden');
+    settingsOverlay.classList.add('hidden');
+    state = 'idle';
+  }
 });
