@@ -34,6 +34,41 @@
         <button class="btn btn-primary" id="action-btn">Játék indítása</button>
       </div>
     </div>
+
+    <div id="settings-overlay" class="overlay hidden">
+      <div class="overlay-box">
+        <h2 style="color:var(--color-primary); font-size:1.5rem; margin-bottom:1.5rem">Beállítások</h2>
+
+        <div class="settings-group">
+          <label style="display:block; margin-bottom:0.5rem; font-weight:700">Világ:</label>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap">
+            <button class="btn-option active" data-setting="world" data-value="1">🌾 Rét</button>
+            <button class="btn-option" data-setting="world" data-value="2">🌲 Erdő</button>
+            <button class="btn-option" data-setting="world" data-value="random">🎲 Random</button>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <label style="display:block; margin-bottom:0.5rem; font-weight:700">Nehézség:</label>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap">
+            <button class="btn-option" data-setting="difficulty" data-value="easy">😊 Könnyű</button>
+            <button class="btn-option active" data-setting="difficulty" data-value="normal">😐 Normál</button>
+            <button class="btn-option" data-setting="difficulty" data-value="hard">😤 Nehéz</button>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <label style="display:block; margin-bottom:0.5rem; font-weight:700">Akadályok:</label>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap">
+            <button class="btn-option active" data-setting="obstacles" data-value="all">🎯 Összes</button>
+            <button class="btn-option" data-setting="obstacles" data-value="birds">🐦 Csak madár</button>
+            <button class="btn-option" data-setting="obstacles" data-value="ground">🪨 Csak föld</button>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="settings-start-btn" style="margin-top:1.5rem">Játék indítása</button>
+      </div>
+    </div>
   </div>
 
   <script src="../../shared/js/utils.js"></script>

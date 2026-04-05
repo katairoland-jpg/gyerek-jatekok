@@ -7,10 +7,21 @@
 const canvas    = document.getElementById('gameCanvas');
 const ctx       = canvas.getContext('2d');
 const overlay   = document.getElementById('overlay');
+const settingsOverlay = document.getElementById('settings-overlay');
 const btnAction = document.getElementById('action-btn');
+const btnSettingsStart = document.getElementById('settings-start-btn');
 const elLives   = document.getElementById('lives');
 const elScore   = document.getElementById('score');
 const elLevel   = document.getElementById('level');
+
+// ─── Beállítások ────────────────────────────────────────────────────────────
+const settings = {
+  world: 1,       // 1, 2, random
+  difficulty: 'normal',  // easy, normal, hard
+  obstacles: 'all'  // all, birds, ground
+};
+
+let difficultyMultiplier = 1.0;
 
 // ─── Konstansok ─────────────────────────────────────────────────────────────
 const W            = canvas.width;
@@ -211,9 +222,18 @@ const OBSTACLE_TYPES = [
 ];
 
 function spawnObstacle() {
-  const type = GameUtils.pick(OBSTACLE_TYPES);
-  obstacles.push({ type, x: W + type.w, y: GROUND - type.yOffset,
-    speed: 3.5 + (level-1)*0.4 + Math.random()*0.8 });
+  let availableTypes = OBSTACLE_TYPES;
+  if (settings.obstacles === 'birds') {
+    availableTypes = OBSTACLE_TYPES.filter(t => t.id === 'madar');
+  } else if (settings.obstacles === 'ground') {
+    availableTypes = OBSTACLE_TYPES.filter(t => t.id !== 'madar');
+  }
+
+  if (availableTypes.length === 0) availableTypes = OBSTACLE_TYPES;
+  const type = GameUtils.pick(availableTypes);
+  const baseSpeed = 3.5 + (level-1)*0.4 + Math.random()*0.8;
+  const speed = baseSpeed * difficultyMultiplier;
+  obstacles.push({ type, x: W + type.w, y: GROUND - type.yOffset, speed });
 }
 
 function updateObstacles() {
@@ -301,7 +321,8 @@ function initEnv2() {
 }
 
 function getPlatSpeed() {
-  return 2.2 + (level - 1) * 0.3;
+  const baseSpeed = 2.2 + (level - 1) * 0.3;
+  return baseSpeed * difficultyMultiplier;
 }
 
 function updatePlatforms() {
@@ -596,15 +617,46 @@ function showOverlay(emoji, title, sub, btnText) {
   overlay.classList.remove('hidden');
 }
 
+function applyDifficulty() {
+  switch(settings.difficulty) {
+    case 'easy':
+      difficultyMultiplier = 0.65;
+      break;
+    case 'normal':
+      difficultyMultiplier = 1.0;
+      break;
+    case 'hard':
+      difficultyMultiplier = 1.4;
+      break;
+  }
+}
+
 function startGame() {
   cancelAnimationFrame(animId);
   score = 0; lives = 3; level = 1; frameCount = 0; envFrames = 0;
-  invincible = 0; environment = 2;
+  invincible = 0;
+
+  // Világ választása
+  if (settings.world === 'random') {
+    environment = Math.random() < 0.5 ? 1 : 2;
+  } else {
+    environment = parseInt(settings.world);
+  }
+
+  applyDifficulty();
+
   obstacles = []; nextObstacleIn = 90;
   platforms = []; forestBirds = [];
   elScore.textContent = 0; elLives.textContent = 3; elLevel.textContent = 1;
-  girl.reset(2);
-  initEnv2();
+
+  if (environment === 1) {
+    girl.reset(1);
+  } else {
+    girl.reset(2);
+    initEnv2();
+  }
+
+  settingsOverlay.classList.add('hidden');
   overlay.classList.add('hidden');
   state = 'playing';
   loop();

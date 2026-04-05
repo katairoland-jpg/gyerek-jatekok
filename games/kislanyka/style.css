@@ -41,3 +41,32 @@
 #overlay-sub    { font-size: 1rem; color: var(--color-muted); line-height: 1.5; }
 
 .overlay.hidden { display: none; }
+
+.settings-group {
+  margin-bottom: 1.5rem;
+  text-align: left;
+}
+
+.btn-option {
+  padding: 0.55rem 1rem;
+  border: 2px solid var(--color-secondary);
+  background: #fff;
+  color: var(--color-dark);
+  border-radius: 50px;
+  font-family: var(--font-main);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-option:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.btn-option.active {
+  background: var(--color-secondary);
+  color: #fff;
+  border-color: var(--color-secondary);
+}
