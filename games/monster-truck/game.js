@@ -13,7 +13,7 @@ const ENGINE_FORCE = 0.45;
 const MAX_SPEED    = 11.5;
 const TERRAIN_LEN  = 9000;
 const FINISH_X     = 8600;
-const CONSTRAINT_ITER = 7;    // megkötés iterációk száma
+const CONSTRAINT_ITER = 5;    // megkötés iterációk száma
 
 // ─── Billentyűk ───────────────────────────────────────────────────────────────
 const keys = {};
@@ -102,13 +102,13 @@ function resolveWheelTerrain(w) {
   const vy = w.y - w.py;
   const vDotN = vx * n.nx + vy * n.ny;
   if (vDotN < 0) {
-    const restitution = 0.14;
+    const restitution = 0.1;
     w.x -= (1 + restitution) * vDotN * n.nx;
     w.y -= (1 + restitution) * vDotN * n.ny;
-    // Súrlódás a tangensirányban
+    // Súrlódás a tangensirányban — lejtőn is csúszhat
     const tx = -n.ny, ty2 = n.nx;
     const vDotT = (w.x - w.px) * tx + (w.y - w.py) * ty2;
-    const friction = 0.83;
+    const friction = 0.80;
     w.x -= (1 - friction) * vDotT * tx;
     w.y -= (1 - friction) * vDotT * ty2;
   }
@@ -117,12 +117,13 @@ function resolveWheelTerrain(w) {
 
 function applyWheelbaseConstraint(a, b) {
   // Merev rúd megkötés: a és b kerék távolsága = WHEELBASE
+  // Alacsony multiplier: nem akadályozza a gravitációt
   for (let i = 0; i < CONSTRAINT_ITER; i++) {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 0.001) continue;
-    const diff = (dist - WHEELBASE) / dist * 0.6;
+    const diff = (dist - WHEELBASE) / dist * 0.35;
     a.x += dx * diff;
     a.y += dy * diff;
     b.x -= dx * diff;
