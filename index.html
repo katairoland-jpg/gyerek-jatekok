@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gyerek Játékok</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" />
+  <link rel="stylesheet" href="shared/css/base.css" />
+  <style>
+    header {
+      text-align: center;
+      padding: 2rem 1rem 1rem;
+    }
+    header h1 {
+      font-size: clamp(2rem, 6vw, 3.5rem);
+      color: var(--color-primary);
+      text-shadow: 3px 3px 0 var(--color-accent);
+    }
+    header p {
+      font-size: 1.2rem;
+      color: var(--color-muted);
+      margin-top: 0.4rem;
+    }
+
+    #game-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1.5rem;
+      max-width: 1000px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+
+    .game-card {
+      display: flex;
+      flex-direction: column;
+      text-decoration: none;
+      color: inherit;
+    }
+    .game-card .thumb {
+      width: 100%;
+      aspect-ratio: 4/3;
+      object-fit: cover;
+      background: linear-gradient(135deg, var(--color-secondary), var(--color-accent));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 4rem;
+    }
+    .game-card img.thumb { display: block; }
+    .game-card .info {
+      padding: 0.9rem 1rem 1rem;
+    }
+    .game-card .info h2 {
+      font-size: 1.15rem;
+      color: var(--color-dark);
+    }
+    .game-card .info p {
+      font-size: 0.9rem;
+      color: var(--color-muted);
+      margin-top: 0.25rem;
+    }
+    .game-card .badge {
+      display: inline-block;
+      margin-top: 0.5rem;
+      background: var(--color-accent);
+      color: var(--color-dark);
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.15rem 0.6rem;
+      border-radius: 50px;
+    }
+    .game-card[data-status="template"] {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    #empty-state {
+      text-align: center;
+      color: var(--color-muted);
+      font-size: 1.1rem;
+      padding: 3rem 1rem;
+      display: none;
+    }
+
+    footer {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: var(--color-muted);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Gyerek Játékok</h1>
+    <p>Válassz egy játékot és kezdj el játszani!</p>
+  </header>
+
+  <main>
+    <div id="game-grid"></div>
+    <p id="empty-state">Még nincsenek játékok — írj ötleteket az <strong>IDEAS.md</strong> fájlba és fejlesszük le őket!</p>
+  </main>
+
+  <footer>Szeretettel készítve kis felfedezőknek.</footer>
+
+  <script>
+    async function loadGames() {
+      let games = [];
+      try {
+        const res = await fetch('games.json');
+        games = await res.json();
+      } catch (e) {
+        console.warn('games.json nem tölthető be', e);
+      }
+
+      const playable = games.filter(g => g.status !== 'template');
+      const grid = document.getElementById('game-grid');
+      const empty = document.getElementById('empty-state');
+
+      if (playable.length === 0) {
+        empty.style.display = 'block';
+        return;
+      }
+
+      playable.forEach(game => {
+        const card = document.createElement('a');
+        card.className = 'card game-card';
+        card.href = game.path;
+        card.dataset.status = game.status || 'ready';
+
+        const thumb = game.thumbnail
+          ? `<img class="thumb" src="${game.thumbnail}" alt="${game.title}" onerror="this.outerHTML='<div class=thumb>${game.emoji || '🎮'}</div>'">`
+          : `<div class="thumb">${game.emoji || '🎮'}</div>`;
+
+        card.innerHTML = `
+          ${thumb}
+          <div class="info">
+            <h2>${game.title}</h2>
+            <p>${game.description}</p>
+            <span class="badge">${game.ageRange} éves korig</span>
+          </div>`;
+
+        grid.appendChild(card);
+      });
+    }
+
+    loadGames();
+  </script>
+</body>
+</html>

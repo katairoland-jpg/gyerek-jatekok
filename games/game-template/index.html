@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Játék neve</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" />
+  <link rel="stylesheet" href="../../shared/css/base.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <a class="back-link" href="../../index.html">← Összes Játék</a>
+
+  <div class="game-area">
+    <header style="text-align:center">
+      <h1 style="font-size:2rem; color:var(--color-primary)">Játék neve</h1>
+      <p style="color:var(--color-muted)">Rövid leírás a játék menetéről.</p>
+    </header>
+
+    <div class="status-bar">
+      <span>Pontszám: <strong id="score">0</strong></span>
+    </div>
+
+    <div id="game-board">
+      <p style="color:var(--color-muted); font-size:1.2rem">
+        Ide kerül a játék tartalma.
+      </p>
+    </div>
+
+    <button class="btn btn-primary" id="start-btn">Indítás</button>
+  </div>
+
+  <script src="../../shared/js/utils.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

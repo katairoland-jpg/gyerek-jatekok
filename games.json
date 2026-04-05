@@ -1,0 +1,12 @@
+[
+  {
+    "id": "game-template",
+    "title": "Game Template",
+    "description": "A starter template — copy this folder to create a new game.",
+    "ageRange": "3-8",
+    "tags": ["template"],
+    "status": "template",
+    "path": "games/game-template/index.html",
+    "thumbnail": "games/game-template/thumbnail.svg"
+  }
+]

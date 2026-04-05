@@ -1,0 +1,119 @@
+/* ============================================================
+   Children's Game Platform — Base Styles
+   ============================================================ */
+
+:root {
+  --color-bg:        #fff9f0;
+  --color-primary:   #ff6b6b;
+  --color-secondary: #4ecdc4;
+  --color-accent:    #ffe66d;
+  --color-dark:      #2c2c54;
+  --color-text:      #333;
+  --color-muted:     #888;
+
+  --font-main: 'Nunito', 'Comic Sans MS', 'Chalkboard SE', cursive;
+  --radius:    16px;
+  --shadow:    0 4px 20px rgba(0,0,0,0.12);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-main);
+  background: var(--color-bg);
+  color: var(--color-text);
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+/* ---- Buttons ---- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.75rem;
+  border: none;
+  border-radius: 50px;
+  font-family: var(--font-main);
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  text-decoration: none;
+  user-select: none;
+}
+.btn:hover  { transform: translateY(-2px); box-shadow: var(--shadow); }
+.btn:active { transform: translateY(0);   box-shadow: none; }
+
+.btn-primary   { background: var(--color-primary);   color: #fff; }
+.btn-secondary { background: var(--color-secondary); color: #fff; }
+.btn-accent    { background: var(--color-accent);    color: var(--color-dark); }
+
+/* ---- Cards ---- */
+.card {
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  transition: transform 0.2s;
+}
+.card:hover { transform: translateY(-4px); }
+
+/* ---- Game canvas area ---- */
+.game-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+/* ---- Score / status bar ---- */
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--color-dark);
+}
+
+/* ---- Celebration overlay ---- */
+.celebrate {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.88);
+  font-size: 2.5rem;
+  font-weight: 900;
+  color: var(--color-primary);
+  z-index: 100;
+  gap: 1rem;
+  animation: popIn 0.3s ease;
+}
+@keyframes popIn {
+  from { transform: scale(0.7); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+/* ---- Back / nav link ---- */
+.back-link {
+  display: inline-block;
+  margin-bottom: 1rem;
+  font-size: 1rem;
+  color: var(--color-secondary);
+  text-decoration: none;
+  font-weight: 700;
+}
+.back-link:hover { text-decoration: underline; }
+
+/* ---- Responsive ---- */
+@media (max-width: 500px) {
+  body { padding: 0.5rem; }
+  .btn { font-size: 1rem; padding: 0.65rem 1.2rem; }
+}
