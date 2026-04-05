@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kislány kalandjai</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" />
+  <link rel="stylesheet" href="../../shared/css/base.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <a class="back-link" href="../../index.html">← Összes Játék</a>
+
+  <div class="game-area">
+    <header style="text-align:center">
+      <h1 style="font-size:2rem; color:var(--color-primary)">Kislány kalandjai</h1>
+      <p style="color:var(--color-muted)">Irányítsd a nyilakkal · ⬆ ugrás · ⬇ guggolás · ⬅ ➡ mozgás</p>
+    </header>
+
+    <div class="status-bar">
+      <span>❤️ <strong id="lives">3</strong></span>
+      <span>Pont: <strong id="score">0</strong></span>
+      <span>Szint: <strong id="level">1</strong></span>
+    </div>
+
+    <canvas id="gameCanvas" width="700" height="320"></canvas>
+
+    <div id="overlay" class="overlay">
+      <div class="overlay-box">
+        <div id="overlay-emoji">🌟</div>
+        <div id="overlay-title">Kislány kalandjai</div>
+        <div id="overlay-sub">Nyilakkal irányítsd a kislányt,<br>kerüld el az akadályokat!</div>
+        <button class="btn btn-primary" id="action-btn">Játék indítása</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../../shared/js/utils.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
