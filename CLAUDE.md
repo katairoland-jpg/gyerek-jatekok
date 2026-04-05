@@ -44,4 +44,4 @@ games/<game-id>/
 ## Meglévő játékok
 | ID | Cím | Leírás |
 |----|-----|--------|
-| kislanyka | Kislány kalandjai | Canvas platformer, nyilakkal irányítható kislány, akadályok |
+| kislanyka | Kislány kalandjai | Canvas platformer, nyilakkal irányítható kislány; Világ 1: rét + akadályok (1 perc), Világ 2: erdő, szigetek, víz |
