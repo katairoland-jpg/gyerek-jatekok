@@ -19,7 +19,7 @@ const GROUND       = H - 60;
 const GRAVITY      = 0.55;
 const JUMP_FORCE   = -13;
 const MOVE_SPEED   = 4.5;
-const ENV1_FRAMES  = 10 * 60;   // 10 sec @ 60fps (teszteléshez) → átmenet
+const ENV1_FRAMES  = 60 * 60;   // 1 perc @ 60fps → átmenet
 
 // ─── Játék állapot ───────────────────────────────────────────────────────────
 let state       = 'idle';   // idle | playing | transitioning | gameover

@@ -11,11 +11,21 @@
   {
     "id": "kislanyka",
     "title": "Kislány kalandjai",
-    "description": "Irányítsd a kislányt nyilakkal, kerüld el az akadályokat!",
+    "description": "Irányítsd a kislányt nyilakkal — rét, majd erdős szigetek!",
     "ageRange": "4–8",
-    "tags": ["mozgás", "reflex"],
+    "tags": ["mozgás", "reflex", "platform"],
     "status": "ready",
     "emoji": "🎀",
     "path": "games/kislanyka/index.html"
+  },
+  {
+    "id": "monster-truck",
+    "title": "Monster Truck Kaland",
+    "description": "Vezérelje a szörnyeteget a döcögős akadálypályán!",
+    "ageRange": "5–10",
+    "tags": ["fizika", "autó", "ügyesség"],
+    "status": "ready",
+    "emoji": "🚛",
+    "path": "games/monster-truck/index.html"
   }
 ]
