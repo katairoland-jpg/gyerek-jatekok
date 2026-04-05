@@ -73,7 +73,6 @@ const girl = {
 
   update() {
     const prevY = this.y;
-    const prevOnGround = this.onGround;
 
     // Horizontális mozgás
     this.vx = 0;
@@ -93,13 +92,13 @@ const girl = {
       this.vy += GRAVITY;
       this.y += this.vy;
 
-      // Talajhoz ütközés
+      // Platformokra ütközés ellenőrzése
+      this.onGround = false;
+      checkPlatformCollisions(this, prevY);
+
+      // Ha nem talált platformot, akkor leesik
       const groundY = getGroundAt(this.x);
-      if (this.y >= groundY && prevY <= groundY) {
-        this.y = groundY;
-        this.vy = 0;
-        this.onGround = true;
-      } else if (this.y > groundY) {
+      if (!this.onGround && this.y >= groundY) {
         this.y = groundY;
         this.vy = 0;
         this.onGround = true;
@@ -117,9 +116,6 @@ const girl = {
       }
     }
 
-    // Platformokra ütközés ellenőrzése
-    checkPlatformCollisions(this, prevY);
-
     // Mászható objektumokra
     checkClimbCollisions(this);
 
@@ -133,11 +129,9 @@ const girl = {
       this.walkFrame = 0;
     }
 
-    // Ha lezuhant a térképről
+    // Ha lezuhant a térképről → respawn
     if (this.y > H + 100) {
-      hit();
-      this.y = 150;
-      this.onGround = true;
+      respawnGirl();
     }
   },
 
@@ -394,6 +388,7 @@ function checkPlatformCollisions(g, prevY) {
   for (const p of platforms) {
     if (gb.x + gb.w < p.x || gb.x > p.x + p.w) continue;
 
+    // Felülről ütközés (lábak)
     if (prevY + g.h <= p.y + 5 && g.y + g.h >= p.y && g.vy >= 0) {
       g.y = p.y - g.h;
       g.vy = 0;
@@ -401,7 +396,6 @@ function checkPlatformCollisions(g, prevY) {
       return;
     }
   }
-  g.onGround = false;
 }
 
 function checkClimbCollisions(g) {
@@ -606,7 +600,30 @@ function loop() {
   animId = requestAnimationFrame(loop);
 }
 
-// ─── Közös függvények ────────────────────────────────────────────────────────
+// ─── Respawn & Hit ───────────────────────────────────────────────────────────
+function respawnGirl() {
+  if (invincible > 0) return;
+
+  lives--;
+  elLives.textContent = lives;
+  invincible = 120;
+  GameUtils.playError();
+
+  // Lányt az utolsó platformra helyezzük
+  if (platforms.length > 0) {
+    const lastPlat = platforms[platforms.length - 2] || platforms[0];
+    girl.x = lastPlat.x + lastPlat.w / 2;
+    girl.y = lastPlat.y - girl.h;
+    girl.vy = 0;
+    girl.onGround = true;
+  } else {
+    girl.x = 100;
+    girl.y = 150;
+  }
+
+  if (lives <= 0) endGame();
+}
+
 function hit() {
   if (invincible > 0) return;
   lives--;
@@ -679,7 +696,8 @@ function endGame() {
   state = 'gameover';
   cancelAnimationFrame(animId);
   setTimeout(() => {
-    showOverlay('😢', 'Játék vége!', `Elértél <strong>${score}</strong> pontot!<br>Világod: ${worldType === 1 ? '🌾 Rét' : '🌲 Erdő'}<br>Próbáld újra!`, 'Beállítások');
+    const worldLabel = worldType === 1 ? '🌾 Rét' : '🌲 Erdő';
+    showOverlay('😢', 'Játék vége!', `Elértél <strong>${score}</strong> pontot!<br>${worldLabel}<br>Próbáld újra!`, 'Beállítások');
   }, 400);
 }
 

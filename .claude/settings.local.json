@@ -14,7 +14,8 @@
       "Bash(curl:*)",
       "WebSearch",
       "Bash(python3 -c \"import sys,json; [print\\(f['name'], f['download_url']\\) for f in json.load\\(sys.stdin\\) if isinstance\\(f, dict\\)]\")",
-      "Bash(python3 -c \"import sys,json; [print\\(f['name'], f['download_url']\\) for f in json.load\\(sys.stdin\\)]\")"
+      "Bash(python3 -c \"import sys,json; [print\\(f['name'], f['download_url']\\) for f in json.load\\(sys.stdin\\)]\")",
+      "Bash(git commit:*)"
     ]
   }
 }
