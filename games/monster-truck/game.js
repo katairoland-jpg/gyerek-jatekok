@@ -11,8 +11,8 @@ const WHEEL_R      = 22;
 const WHEELBASE    = 76;       // keréktengelyek távolsága
 const ENGINE_FORCE = 0.45;
 const MAX_SPEED    = 11.5;
-const TERRAIN_LEN  = 9000;
-const FINISH_X     = 8600;
+const TERRAIN_LEN  = 4500;    // TEST: rövidebb pálya
+const FINISH_X     = 4200;    // TEST: hamarabb vége
 const CONSTRAINT_ITER = 5;    // megkötés iterációk száma
 
 // ─── Billentyűk ───────────────────────────────────────────────────────────────
@@ -37,16 +37,24 @@ function buildTerrain() {
 
 function terrainF(x) {
   if (x < 0) return GROUND_Y;
-  // lapos indulás
-  const blend = Math.min(1, x / 320);
-  const raw =
-    GROUND_Y
-    - Math.sin(x * 0.00310) * 55   // hosszú dombok
-    - Math.sin(x * 0.00870 + 1.1) * 32  // közepes dombok
-    - Math.sin(x * 0.01980 + 0.5) * 18  // kis dudorok
-    - Math.sin(x * 0.04900 + 2.3) * 9;  // apró hullámok
-  const clamped = Math.max(GROUND_Y - 140, Math.min(GROUND_Y + 20, raw));
-  return GROUND_Y + (clamped - GROUND_Y) * blend;
+
+  // TEST TRACK: lapos → emelkedő → lapos → leszálló → lapos
+  if (x < 800) {
+    // Flat section 1
+    return GROUND_Y;
+  } else if (x < 1600) {
+    // Upslope: 45 degrees over 800px
+    return GROUND_Y - (x - 800) * (150 / 800);
+  } else if (x < 2400) {
+    // Flat section 2 (elevated)
+    return GROUND_Y - 150;
+  } else if (x < 3200) {
+    // Downslope: 45 degrees over 800px
+    return GROUND_Y - 150 + (x - 2400) * (150 / 800);
+  } else {
+    // Flat section 3
+    return GROUND_Y;
+  }
 }
 
 function getTerrainY(wx) {
@@ -357,6 +365,11 @@ function drawTruck() {
   const cx = (rx + fx) / 2;
   const cy = (rear.y + front.y) / 2;
 
+  // DEBUG: velocity
+  const vx = (front.x - front.px + rear.x - rear.px) / 2;
+  const vy = (front.y - front.py + rear.y - rear.py) / 2;
+  const speed = Math.sqrt(vx * vx + vy * vy);
+
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(angle);
@@ -426,10 +439,36 @@ function drawTruck() {
     ctx.textAlign = 'center';
     ctx.fillText('⚠️ Megdől!', cx, rear.y - 60);
   }
+
+  // DEBUG OUTPUT
+  ctx.font = '12px monospace';
+  ctx.fillStyle = '#222';
+  ctx.textAlign = 'left';
+  ctx.fillText(`Pos: ${truckCenter().x.toFixed(0)}, V: ${vx.toFixed(2)}, ${vy.toFixed(2)}`, 10, 20);
+  ctx.fillText(`Speed: ${speed.toFixed(3)}`, 10, 35);
 }
 
 // ─── Pálya díszítők ───────────────────────────────────────────────────────────
 function drawDecorations() {
+  // TEST TRACK LABELS
+  const labels = [
+    { x: 400, label: "Flat 1" },
+    { x: 1200, label: "↗ Up" },
+    { x: 2000, label: "Flat 2" },
+    { x: 2800, label: "↘ Down" },
+    { x: 3600, label: "Flat 3" }
+  ];
+
+  for (const {x, label} of labels) {
+    const sx = x - cameraX;
+    if (sx < -60 || sx > W + 60) continue;
+    const ty = getTerrainY(x) - 80;
+    ctx.font = 'bold 16px Nunito, sans-serif';
+    ctx.fillStyle = '#222';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, sx, ty);
+  }
+
   // Fák (hátul)
   for (let wx = 400; wx < TERRAIN_LEN; wx += 350) {
     const sx = wx - cameraX;
