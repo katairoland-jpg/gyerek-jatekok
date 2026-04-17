@@ -6,15 +6,15 @@ const W = canvas.width;
 const H = canvas.height;
 
 // ─── Konstansok ───────────────────────────────────────────────────────────────
-const VERSION      = "1.0.4";
-const GRAVITY      = 1.1;     // erős gravitáció tartja talajban
+const VERSION      = "1.0.5";
+const GRAVITY      = 0.95;    // mérsékelt, stabil
 const WHEEL_R      = 22;
 const WHEELBASE    = 76;       // keréktengelyek távolsága
 const ENGINE_FORCE = 1.0;      // motor erő
 const MAX_SPEED    = 32;       // 2x max sebesség
 const TERRAIN_LEN  = 4500;    // TEST: rövidebb pálya
 const FINISH_X     = 4200;    // TEST: hamarabb vége
-const CONSTRAINT_ITER = 5;    // normál iteráció
+const CONSTRAINT_ITER = 8;    // több iteráció = stabilabb
 
 // ─── Billentyűk ───────────────────────────────────────────────────────────────
 const keys = {};
@@ -104,9 +104,9 @@ function resolveWheelTerrain(w) {
 
   const n = getTerrainNormal(w.x);
 
-  // Kerék kilökése a terepből a normál irányában
-  w.x -= n.nx * pen;
-  w.y -= n.ny * pen;
+  // Kerék kilökése a terepből: csak 60%-a a penetrációnak
+  w.x -= n.nx * pen * 0.6;
+  w.y -= n.ny * pen * 0.6;
 
   // Sebesség tükrözése a normál mentén (inelasztikus)
   const vx = w.x - w.px;
@@ -128,13 +128,13 @@ function resolveWheelTerrain(w) {
 
 function applyWheelbaseConstraint(a, b) {
   // Merev rúd megkötés: a és b kerék távolsága = WHEELBASE
-  // Erős: kerekek sosem szétválnak
+  // Alacsony stiffness: nem szakad szét
   for (let i = 0; i < CONSTRAINT_ITER; i++) {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 0.001) continue;
-    const diff = (dist - WHEELBASE) / dist * 0.50;  // nagyon erős
+    const diff = (dist - WHEELBASE) / dist * 0.25;  // alacsony
     a.x += dx * diff;
     a.y += dy * diff;
     b.x -= dx * diff;
@@ -191,22 +191,22 @@ function updateTruck() {
   resolveWheelTerrain(rear);
   resolveWheelTerrain(front);
 
-  // Gentle safety clamp: ha túl mélyen benyomódott, segítség
+  // Minimal safety clamp: csak nagyon mély penetráción segít
   const rearTerrainY = getTerrainY(rear.x);
   const frontTerrainY = getTerrainY(front.x);
   const rearPen = (rear.y + WHEEL_R) - rearTerrainY;
   const frontPen = (front.y + WHEEL_R) - frontTerrainY;
 
-  // Csak ha jelentős penetráció (> 5px), és csak fele erővel
-  if (rearPen > 5) {
+  // Csak 10px+ penetráción, 30%-os erővel
+  if (rearPen > 10) {
     const n = getTerrainNormal(rear.x);
-    rear.x -= n.nx * rearPen * 0.5;
-    rear.y -= n.ny * rearPen * 0.5;
+    rear.x -= n.nx * rearPen * 0.3;
+    rear.y -= n.ny * rearPen * 0.3;
   }
-  if (frontPen > 5) {
+  if (frontPen > 10) {
     const n = getTerrainNormal(front.x);
-    front.x -= n.nx * frontPen * 0.5;
-    front.y -= n.ny * frontPen * 0.5;
+    front.x -= n.nx * frontPen * 0.3;
+    front.y -= n.ny * frontPen * 0.3;
   }
 
   // Debug info
