@@ -6,6 +6,7 @@ const W = canvas.width;
 const H = canvas.height;
 
 // ─── Konstansok ───────────────────────────────────────────────────────────────
+const VERSION      = "1.0.1";
 const GRAVITY      = 0.9;     // mérsékelt gravitáció + hard clamp = talaj megtartás
 const WHEEL_R      = 22;
 const WHEELBASE    = 76;       // keréktengelyek távolsága
@@ -99,11 +100,10 @@ function resolveWheelTerrain(w) {
   const ty = getTerrainY(w.x);
   const pen = (w.y + WHEEL_R) - ty;
 
-  // Hard clamp: kerék nem mehet alá
-  if (w.y + WHEEL_R < ty) {
+  // Hard clamp: kerék nem mehet alá (penetráció = y + R > ty)
+  if (w.y + WHEEL_R > ty) {
     w.y = ty - WHEEL_R;
     w.onGround = true;
-    return;
   }
 
   if (pen <= 0) { w.onGround = false; return; }
@@ -584,5 +584,5 @@ window.addEventListener('keydown', e => {
   if (e.key === ' ' && (gameState === 'idle' || gameState === 'gameover' || gameState === 'finished')) startGame();
 });
 
-showOverlay('🚛', 'Monster Truck Kaland', 'Vezérelje a szörnyeteget az akadálypályán!<br>⬅ visszafelé · ➡ előre', 'Indítás!');
+showOverlay('🚛', 'Monster Truck Kaland', `Vezérelje a szörnyeteget az akadálypályán!<br>⬅ visszafelé · ➡ előre<br><small style="opacity:0.6">v${VERSION}</small>`, 'Indítás!');
 gameState = 'idle';
