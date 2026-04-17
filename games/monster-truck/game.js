@@ -6,7 +6,7 @@ const W = canvas.width;
 const H = canvas.height;
 
 // ─── Konstansok ───────────────────────────────────────────────────────────────
-const GRAVITY      = 0.45;
+const GRAVITY      = 0.85;    // erősebb gravitáció → gyorsabb süllyedés
 const WHEEL_R      = 22;
 const WHEELBASE    = 76;       // keréktengelyek távolsága
 const ENGINE_FORCE = 0.45;
@@ -102,13 +102,13 @@ function resolveWheelTerrain(w) {
   const vy = w.y - w.py;
   const vDotN = vx * n.nx + vy * n.ny;
   if (vDotN < 0) {
-    const restitution = 0.1;
+    const restitution = 0.05;  // kevésbé rugalmas → könnyebb kezelés
     w.x -= (1 + restitution) * vDotN * n.nx;
     w.y -= (1 + restitution) * vDotN * n.ny;
     // Súrlódás a tangensirányban — lejtőn is csúszhat
     const tx = -n.ny, ty2 = n.nx;
     const vDotT = (w.x - w.px) * tx + (w.y - w.py) * ty2;
-    const friction = 0.80;
+    const friction = 0.88;  // jobb tapadás
     w.x -= (1 - friction) * vDotT * tx;
     w.y -= (1 - friction) * vDotT * ty2;
   }
@@ -123,7 +123,7 @@ function applyWheelbaseConstraint(a, b) {
     const dy = b.y - a.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 0.001) continue;
-    const diff = (dist - WHEELBASE) / dist * 0.35;
+    const diff = (dist - WHEELBASE) / dist * 0.20;  // csökkentett stiffness → könnyebben hullik
     a.x += dx * diff;
     a.y += dy * diff;
     b.x -= dx * diff;
