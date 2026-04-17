@@ -6,7 +6,7 @@ const W = canvas.width;
 const H = canvas.height;
 
 // ─── Konstansok ───────────────────────────────────────────────────────────────
-const GRAVITY      = 1.2;     // erős gravitáció → kerekek maradnak talajban
+const GRAVITY      = 0.9;     // mérsékelt gravitáció + hard clamp = talaj megtartás
 const WHEEL_R      = 22;
 const WHEELBASE    = 76;       // keréktengelyek távolsága
 const ENGINE_FORCE = 1.0;      // 2x motor erő
@@ -98,6 +98,14 @@ function stepWheel(w, ax, ay) {
 function resolveWheelTerrain(w) {
   const ty = getTerrainY(w.x);
   const pen = (w.y + WHEEL_R) - ty;
+
+  // Hard clamp: kerék nem mehet alá
+  if (w.y + WHEEL_R < ty) {
+    w.y = ty - WHEEL_R;
+    w.onGround = true;
+    return;
+  }
+
   if (pen <= 0) { w.onGround = false; return; }
 
   const n = getTerrainNormal(w.x);
@@ -125,13 +133,13 @@ function resolveWheelTerrain(w) {
 
 function applyWheelbaseConstraint(a, b) {
   // Merev rúd megkötés: a és b kerék távolsága = WHEELBASE
-  // Köztes stiffness: kerekek összetartanak, de nem csúsznak ki
+  // Alacsony stiffness: kerekek követik a terep formáját
   for (let i = 0; i < CONSTRAINT_ITER; i++) {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 0.001) continue;
-    const diff = (dist - WHEELBASE) / dist * 0.30;  // köztes → jó egyensúly
+    const diff = (dist - WHEELBASE) / dist * 0.22;  // alacsonyabb → követi a terep kontúrját
     a.x += dx * diff;
     a.y += dy * diff;
     b.x -= dx * diff;
