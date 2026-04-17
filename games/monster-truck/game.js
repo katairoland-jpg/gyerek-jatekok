@@ -105,18 +105,18 @@ function resolveWheelTerrain(w) {
   w.x -= n.nx * pen;
   w.y -= n.ny * pen;
 
-  // Sebesség tükrözése a normál mentén (rugalmas ütközés)
+  // Sebesség tükrözése a normál mentén (teljesen inelasztikus)
   const vx = w.x - w.px;
   const vy = w.y - w.py;
   const vDotN = vx * n.nx + vy * n.ny;
   if (vDotN < 0) {
-    const restitution = 0.05;  // kevésbé rugalmas → könnyebb kezelés
+    const restitution = 0;  // teljesen abszorbeál → nincs pattanás
     w.x -= (1 + restitution) * vDotN * n.nx;
     w.y -= (1 + restitution) * vDotN * n.ny;
     // Súrlódás a tangensirányban — lejtőn is csúszhat
     const tx = -n.ny, ty2 = n.nx;
     const vDotT = (w.x - w.px) * tx + (w.y - w.py) * ty2;
-    const friction = 0.75;  // kevesebb energia veszteség
+    const friction = 0.85;  // jó tapadás, stabil
     w.x -= (1 - friction) * vDotT * tx;
     w.y -= (1 - friction) * vDotT * ty2;
   }
@@ -125,13 +125,13 @@ function resolveWheelTerrain(w) {
 
 function applyWheelbaseConstraint(a, b) {
   // Merev rúd megkötés: a és b kerék távolsága = WHEELBASE
-  // Alacsony multiplier: szabad mozgás, kisebb energia veszteség
+  // Erős megkötés: kerekek nem szétválnak
   for (let i = 0; i < CONSTRAINT_ITER; i++) {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 0.001) continue;
-    const diff = (dist - WHEELBASE) / dist * 0.18;  // alacsonyabb → még szabad
+    const diff = (dist - WHEELBASE) / dist * 0.40;  // erős → kerekek összetartanak
     a.x += dx * diff;
     a.y += dy * diff;
     b.x -= dx * diff;
