@@ -9,8 +9,8 @@ const H = canvas.height;
 const GRAVITY      = 0.85;    // erősebb gravitáció → gyorsabb süllyedés
 const WHEEL_R      = 22;
 const WHEELBASE    = 76;       // keréktengelyek távolsága
-const ENGINE_FORCE = 0.45;
-const MAX_SPEED    = 11.5;
+const ENGINE_FORCE = 0.50;     // motor erő növelés
+const MAX_SPEED    = 16;       // gyorsabb max sebesség
 const TERRAIN_LEN  = 4500;    // TEST: rövidebb pálya
 const FINISH_X     = 4200;    // TEST: hamarabb vége
 const CONSTRAINT_ITER = 5;    // megkötés iterációk száma
@@ -116,7 +116,7 @@ function resolveWheelTerrain(w) {
     // Súrlódás a tangensirányban — lejtőn is csúszhat
     const tx = -n.ny, ty2 = n.nx;
     const vDotT = (w.x - w.px) * tx + (w.y - w.py) * ty2;
-    const friction = 0.88;  // jobb tapadás
+    const friction = 0.84;  // jó tapadás, kisebb dampening
     w.x -= (1 - friction) * vDotT * tx;
     w.y -= (1 - friction) * vDotT * ty2;
   }
@@ -125,13 +125,13 @@ function resolveWheelTerrain(w) {
 
 function applyWheelbaseConstraint(a, b) {
   // Merev rúd megkötés: a és b kerék távolsága = WHEELBASE
-  // Alacsony multiplier: nem akadályozza a gravitációt
+  // Jó egyensúly: elég merev trakció, de még hullik
   for (let i = 0; i < CONSTRAINT_ITER; i++) {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 0.001) continue;
-    const diff = (dist - WHEELBASE) / dist * 0.20;  // csökkentett stiffness → könnyebben hullik
+    const diff = (dist - WHEELBASE) / dist * 0.28;  // köztes stiffness
     a.x += dx * diff;
     a.y += dy * diff;
     b.x -= dx * diff;
@@ -165,6 +165,8 @@ function isFlipped() {
 }
 
 // ─── Update ───────────────────────────────────────────────────────────────────
+let debugInfo = {};
+
 function updateTruck() {
   // Motor erő – csak ha talajon van legalább az egyik kerék
   let ax = 0;
@@ -185,6 +187,14 @@ function updateTruck() {
   // Terep ütközés még egyszer a megkötés után
   resolveWheelTerrain(rear);
   resolveWheelTerrain(front);
+
+  // Debug info
+  debugInfo = {
+    rearGround: rear.onGround,
+    frontGround: front.onGround,
+    motorForce: ax,
+    angle: (truckAngle() * 180 / Math.PI).toFixed(1)
+  };
 
   // Keréknyom-forgás (vizuális)
   const vx = (front.x - front.px + rear.x - rear.px) / 2;
@@ -444,8 +454,8 @@ function drawTruck() {
   ctx.font = '12px monospace';
   ctx.fillStyle = '#222';
   ctx.textAlign = 'left';
-  ctx.fillText(`Pos: ${truckCenter().x.toFixed(0)}, V: ${vx.toFixed(2)}, ${vy.toFixed(2)}`, 10, 20);
-  ctx.fillText(`Speed: ${speed.toFixed(3)}`, 10, 35);
+  ctx.fillText(`Pos: ${truckCenter().x.toFixed(0)} | V: vx=${vx.toFixed(2)} vy=${vy.toFixed(2)} | Speed: ${speed.toFixed(3)}`, 10, 20);
+  ctx.fillText(`Ground: R=${debugInfo.rearGround ? '✓' : '✗'} F=${debugInfo.frontGround ? '✓' : '✗'} | Force: ${debugInfo.motorForce.toFixed(2)} | Angle: ${debugInfo.angle}°`, 10, 35);
 }
 
 // ─── Pálya díszítők ───────────────────────────────────────────────────────────
