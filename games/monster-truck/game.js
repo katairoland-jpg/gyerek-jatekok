@@ -6,8 +6,8 @@ const W = canvas.width;
 const H = canvas.height;
 
 // ─── Konstansok ───────────────────────────────────────────────────────────────
-const VERSION      = "1.0.3";
-const GRAVITY      = 0.85;    // normál gravitáció
+const VERSION      = "1.0.4";
+const GRAVITY      = 1.1;     // erős gravitáció tartja talajban
 const WHEEL_R      = 22;
 const WHEELBASE    = 76;       // keréktengelyek távolsága
 const ENGINE_FORCE = 1.0;      // motor erő
@@ -128,13 +128,13 @@ function resolveWheelTerrain(w) {
 
 function applyWheelbaseConstraint(a, b) {
   // Merev rúd megkötés: a és b kerék távolsága = WHEELBASE
-  // Erős elegendő hogy ne szétváljon, de nem blokkolja a lejtőt
+  // Erős: kerekek sosem szétválnak
   for (let i = 0; i < CONSTRAINT_ITER; i++) {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 0.001) continue;
-    const diff = (dist - WHEELBASE) / dist * 0.35;  // stabil, erős
+    const diff = (dist - WHEELBASE) / dist * 0.50;  // nagyon erős
     a.x += dx * diff;
     a.y += dy * diff;
     b.x -= dx * diff;
@@ -191,20 +191,22 @@ function updateTruck() {
   resolveWheelTerrain(rear);
   resolveWheelTerrain(front);
 
-  // Final hard clamp: semmilyen kerék nem mehet alá
+  // Gentle safety clamp: ha túl mélyen benyomódott, segítség
   const rearTerrainY = getTerrainY(rear.x);
   const frontTerrainY = getTerrainY(front.x);
-  if (rear.y + WHEEL_R > rearTerrainY) {
+  const rearPen = (rear.y + WHEEL_R) - rearTerrainY;
+  const frontPen = (front.y + WHEEL_R) - frontTerrainY;
+
+  // Csak ha jelentős penetráció (> 5px), és csak fele erővel
+  if (rearPen > 5) {
     const n = getTerrainNormal(rear.x);
-    const pen = (rear.y + WHEEL_R) - rearTerrainY;
-    rear.x -= n.nx * pen;
-    rear.y -= n.ny * pen;
+    rear.x -= n.nx * rearPen * 0.5;
+    rear.y -= n.ny * rearPen * 0.5;
   }
-  if (front.y + WHEEL_R > frontTerrainY) {
+  if (frontPen > 5) {
     const n = getTerrainNormal(front.x);
-    const pen = (front.y + WHEEL_R) - frontTerrainY;
-    front.x -= n.nx * pen;
-    front.y -= n.ny * pen;
+    front.x -= n.nx * frontPen * 0.5;
+    front.y -= n.ny * frontPen * 0.5;
   }
 
   // Debug info
