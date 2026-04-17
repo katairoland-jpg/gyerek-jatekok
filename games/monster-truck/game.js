@@ -6,14 +6,14 @@ const W = canvas.width;
 const H = canvas.height;
 
 // ─── Konstansok ───────────────────────────────────────────────────────────────
-const GRAVITY      = 0.85;
+const GRAVITY      = 1.2;     // erős gravitáció → kerekek maradnak talajban
 const WHEEL_R      = 22;
 const WHEELBASE    = 76;       // keréktengelyek távolsága
 const ENGINE_FORCE = 1.0;      // 2x motor erő
 const MAX_SPEED    = 32;       // 2x max sebesség
 const TERRAIN_LEN  = 4500;    // TEST: rövidebb pálya
 const FINISH_X     = 4200;    // TEST: hamarabb vége
-const CONSTRAINT_ITER = 8;    // több iteráció → stabilabb
+const CONSTRAINT_ITER = 5;    // normál iteráció
 
 // ─── Billentyűk ───────────────────────────────────────────────────────────────
 const keys = {};
@@ -125,13 +125,13 @@ function resolveWheelTerrain(w) {
 
 function applyWheelbaseConstraint(a, b) {
   // Merev rúd megkötés: a és b kerék távolsága = WHEELBASE
-  // Erős megkötés: kerekek nem szétválnak
+  // Köztes stiffness: kerekek összetartanak, de nem csúsznak ki
   for (let i = 0; i < CONSTRAINT_ITER; i++) {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 0.001) continue;
-    const diff = (dist - WHEELBASE) / dist * 0.40;  // erős → kerekek összetartanak
+    const diff = (dist - WHEELBASE) / dist * 0.30;  // köztes → jó egyensúly
     a.x += dx * diff;
     a.y += dy * diff;
     b.x -= dx * diff;
