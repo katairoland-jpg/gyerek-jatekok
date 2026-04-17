@@ -6,11 +6,11 @@ const W = canvas.width;
 const H = canvas.height;
 
 // ─── Konstansok ───────────────────────────────────────────────────────────────
-const VERSION      = "1.0.2";
-const GRAVITY      = 1.0;     // gravitáció, normalizált penetráció kilökéshez
+const VERSION      = "1.0.3";
+const GRAVITY      = 0.85;    // normál gravitáció
 const WHEEL_R      = 22;
 const WHEELBASE    = 76;       // keréktengelyek távolsága
-const ENGINE_FORCE = 1.2;      // erős motor lejtőhöz
+const ENGINE_FORCE = 1.0;      // motor erő
 const MAX_SPEED    = 32;       // 2x max sebesség
 const TERRAIN_LEN  = 4500;    // TEST: rövidebb pálya
 const FINISH_X     = 4200;    // TEST: hamarabb vége
@@ -105,10 +105,8 @@ function resolveWheelTerrain(w) {
   const n = getTerrainNormal(w.x);
 
   // Kerék kilökése a terepből a normál irányában
-  // Erősítés: nagyobb penetráció = erősebb kilökés
-  let pushFactor = Math.min(1.5, 1 + pen * 0.1);
-  w.x -= n.nx * pen * pushFactor;
-  w.y -= n.ny * pen * pushFactor;
+  w.x -= n.nx * pen;
+  w.y -= n.ny * pen;
 
   // Sebesség tükrözése a normál mentén (inelasztikus)
   const vx = w.x - w.px;
@@ -121,7 +119,7 @@ function resolveWheelTerrain(w) {
     // Súrlódás a tangensirányban
     const tx = -n.ny, ty2 = n.nx;
     const vDotT = (w.x - w.px) * tx + (w.y - w.py) * ty2;
-    const friction = 0.75;  // kevesebb súrlódás lejtőn könnyebb kúszás
+    const friction = 0.80;  // jó tapadás
     w.x -= (1 - friction) * vDotT * tx;
     w.y -= (1 - friction) * vDotT * ty2;
   }
@@ -130,13 +128,13 @@ function resolveWheelTerrain(w) {
 
 function applyWheelbaseConstraint(a, b) {
   // Merev rúd megkötés: a és b kerék távolsága = WHEELBASE
-  // Jó egyensúly: stabil kúszás lejtőn, de szabad mozgás
+  // Erős elegendő hogy ne szétváljon, de nem blokkolja a lejtőt
   for (let i = 0; i < CONSTRAINT_ITER; i++) {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 0.001) continue;
-    const diff = (dist - WHEELBASE) / dist * 0.32;  // köztes stiffness
+    const diff = (dist - WHEELBASE) / dist * 0.35;  // stabil, erős
     a.x += dx * diff;
     a.y += dy * diff;
     b.x -= dx * diff;
@@ -192,6 +190,22 @@ function updateTruck() {
   // Terep ütközés még egyszer a megkötés után
   resolveWheelTerrain(rear);
   resolveWheelTerrain(front);
+
+  // Final hard clamp: semmilyen kerék nem mehet alá
+  const rearTerrainY = getTerrainY(rear.x);
+  const frontTerrainY = getTerrainY(front.x);
+  if (rear.y + WHEEL_R > rearTerrainY) {
+    const n = getTerrainNormal(rear.x);
+    const pen = (rear.y + WHEEL_R) - rearTerrainY;
+    rear.x -= n.nx * pen;
+    rear.y -= n.ny * pen;
+  }
+  if (front.y + WHEEL_R > frontTerrainY) {
+    const n = getTerrainNormal(front.x);
+    const pen = (front.y + WHEEL_R) - frontTerrainY;
+    front.x -= n.nx * pen;
+    front.y -= n.ny * pen;
+  }
 
   // Debug info
   debugInfo = {
