@@ -19,6 +19,16 @@
     "path": "games/kislanyka/index.html"
   },
   {
+    "id": "palota-kaland",
+    "title": "Palota Kaland",
+    "description": "Prince of Persia stílusú platformer — mozgó platformok, csapdák, fal-kapaszkodás!",
+    "ageRange": "6–10",
+    "tags": ["platformer", "csapdák", "ügyes"],
+    "status": "ready",
+    "emoji": "🏰",
+    "path": "games/palota-kaland/index.html"
+  },
+  {
     "id": "monster-truck",
     "title": "Monster Truck Kaland",
     "description": "Vezérelje a szörnyeteget a döcögős akadálypályán!",

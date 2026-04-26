@@ -15,7 +15,23 @@
       "WebSearch",
       "Bash(python3 -c \"import sys,json; [print\\(f['name'], f['download_url']\\) for f in json.load\\(sys.stdin\\) if isinstance\\(f, dict\\)]\")",
       "Bash(python3 -c \"import sys,json; [print\\(f['name'], f['download_url']\\) for f in json.load\\(sys.stdin\\)]\")",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(brew list:*)",
+      "Bash(brew install:*)",
+      "Bash(cmake -B build)",
+      "Bash(rm -rf build)",
+      "Bash(LDFLAGS=\"-L/opt/homebrew/lib\" CPPFLAGS=\"-I/opt/homebrew/include\" cmake -B build)",
+      "Read(//opt/homebrew/lib/**)",
+      "Read(//opt/homebrew/**)",
+      "Bash(LDFLAGS=\"-L/opt/homebrew/Cellar/jpeg/10/lib\" CPPFLAGS=\"-I/opt/homebrew/Cellar/jpeg/10/include\" cmake -B build)",
+      "Bash(cmake -B build -DJPEG_INCLUDE_DIR=/opt/homebrew/Cellar/jpeg/10/include -DJPEG_LIBRARY=/opt/homebrew/Cellar/jpeg/10/lib/libjpeg.dylib)",
+      "Bash(brew link:*)",
+      "Bash(cmake --build build --parallel 4)",
+      "Bash(cmake -B build -DJPEG_INCLUDE_DIR=/opt/homebrew/Cellar/jpeg/10/include -DJPEG_LIBRARY=/opt/homebrew/Cellar/jpeg/10/lib/libjpeg.dylib -DPNG_INCLUDE_DIR=/opt/homebrew/Cellar/libpng/1.6.40/include -DPNG_LIBRARY=/opt/homebrew/Cellar/libpng/1.6.40/lib/libpng.dylib)",
+      "Bash(cmake --install build --prefix /Users/judit/Developer/X-Moto/install)",
+      "Bash(/Users/judit/Developer/X-Moto/install/bin/xmoto:*)",
+      "Bash(python3 generate_truck_textures.py)",
+      "Bash(pip3 install:*)"
     ]
   }
 }
