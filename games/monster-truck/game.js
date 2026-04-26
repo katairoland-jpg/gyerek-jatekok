@@ -1,601 +1,435 @@
-// ─── Monster Truck Kaland — Elasto Mania-stílusú fizika ──────────────────────
+/**
+ * Monster Truck Kaland - Matter.js Physics Edition
+ * Bouncy truck with big wheels and hilly terrain
+ */
 
-const canvas = document.getElementById('gameCanvas');
-const ctx    = canvas.getContext('2d');
-const W = canvas.width;
-const H = canvas.height;
+const { Engine, World, Body, Bodies, Constraint } = Matter;
 
-// ─── Konstansok ───────────────────────────────────────────────────────────────
-const VERSION      = "1.0.5";
-const GRAVITY      = 0.95;    // mérsékelt, stabil
-const WHEEL_R      = 22;
-const WHEELBASE    = 76;       // keréktengelyek távolsága
-const ENGINE_FORCE = 1.0;      // motor erő
-const MAX_SPEED    = 32;       // 2x max sebesség
-const TERRAIN_LEN  = 4500;    // TEST: rövidebb pálya
-const FINISH_X     = 4200;    // TEST: hamarabb vége
-const CONSTRAINT_ITER = 8;    // több iteráció = stabilabb
+class MonsterTruckGame {
+  constructor() {
+    this.canvas = document.getElementById('gameCanvas');
+    this.ctx = this.canvas.getContext('2d');
+    this.overlay = document.getElementById('overlay');
+    this.statusBar = document.querySelector('.status-bar');
 
-// ─── Billentyűk ───────────────────────────────────────────────────────────────
-const keys = {};
-window.addEventListener('keydown', e => {
-  keys[e.key] = true;
-  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key)) e.preventDefault();
-});
-window.addEventListener('keyup', e => { keys[e.key] = false; });
+    // Game settings
+    this.GRAVITY = 1.8;
+    this.TRUCK_MASS = 300;
+    this.WHEEL_RADIUS = 25;
+    this.TRUCK_WIDTH = 60;
+    this.TRUCK_HEIGHT = 40;
+    this.WHEELBASE = 100;
 
-// ─── Terepgenerátor ───────────────────────────────────────────────────────────
-const GROUND_Y = H - 55;
-const TSTEP = 6;
-let terrain = [];
+    // Create physics engine
+    this.engine = Engine.create({ gravity: { y: this.GRAVITY } });
+    this.world = this.engine.world;
 
-function buildTerrain() {
-  terrain = [];
-  for (let x = 0; x <= TERRAIN_LEN; x += TSTEP) {
-    terrain.push({ x, y: terrainF(x) });
-  }
-}
+    // Game state
+    this.gameState = 'start'; // start, playing, won, lost
+    this.lives = 3;
+    this.distance = 0;
+    this.level = 1;
+    this.crashed = false;
 
-function terrainF(x) {
-  if (x < 0) return GROUND_Y;
+    // Input
+    this.keys = {};
+    this.setupInput();
 
-  // TEST TRACK: lapos → emelkedő → lapos → leszálló → lapos
-  if (x < 800) {
-    // Flat section 1
-    return GROUND_Y;
-  } else if (x < 1600) {
-    // Upslope: 45 degrees over 800px
-    return GROUND_Y - (x - 800) * (150 / 800);
-  } else if (x < 2400) {
-    // Flat section 2 (elevated)
-    return GROUND_Y - 150;
-  } else if (x < 3200) {
-    // Downslope: 45 degrees over 800px
-    return GROUND_Y - 150 + (x - 2400) * (150 / 800);
-  } else {
-    // Flat section 3
-    return GROUND_Y;
-  }
-}
+    // Create scene
+    this.createTerrain();
+    this.createTruck();
+    this.createFinish();
 
-function getTerrainY(wx) {
-  if (wx <= 0) return GROUND_Y;
-  if (wx >= TERRAIN_LEN) return GROUND_Y;
-  const i = Math.floor(wx / TSTEP);
-  if (i >= terrain.length - 1) return terrain[terrain.length - 1].y;
-  const t = (wx - terrain[i].x) / TSTEP;
-  return terrain[i].y + (terrain[i + 1].y - terrain[i].y) * t;
-}
+    // Camera
+    this.cameraX = 0;
 
-function getTerrainNormal(wx) {
-  // Terep normálvektora → merőleges a felszínre, felfelé mutat
-  const dy = getTerrainY(wx + 2) - getTerrainY(wx - 2);
-  const dx = 4;
-  const len = Math.sqrt(dx * dx + dy * dy);
-  return { nx: -dy / len, ny: -dx / len };  // forgás 90°-kal
-}
-
-// ─── Kerék fizika ─────────────────────────────────────────────────────────────
-function makeWheel(x, y) {
-  return { x, y, px: x, py: y, angle: 0, onGround: false };
-}
-
-function stepWheel(w, ax, ay) {
-  const vx = w.x - w.px;
-  const vy = w.y - w.py;
-  w.px = w.x;
-  w.py = w.y;
-  w.x += vx + ax;
-  w.y += vy + ay + GRAVITY;
-  // Max sebesség korlát
-  const speed = Math.sqrt((w.x-w.px)**2 + (w.y-w.py)**2);
-  if (speed > MAX_SPEED) {
-    const f = MAX_SPEED / speed;
-    w.x = w.px + (w.x - w.px) * f;
-    w.y = w.py + (w.y - w.py) * f;
-  }
-}
-
-function resolveWheelTerrain(w) {
-  const ty = getTerrainY(w.x);
-  const pen = (w.y + WHEEL_R) - ty;
-
-  if (pen <= 0) { w.onGround = false; return; }
-
-  const n = getTerrainNormal(w.x);
-
-  // Kerék kilökése a terepből: csak 60%-a a penetrációnak
-  w.x -= n.nx * pen * 0.6;
-  w.y -= n.ny * pen * 0.6;
-
-  // Sebesség tükrözése a normál mentén (inelasztikus)
-  const vx = w.x - w.px;
-  const vy = w.y - w.py;
-  const vDotN = vx * n.nx + vy * n.ny;
-  if (vDotN < 0) {
-    const restitution = 0;
-    w.x -= (1 + restitution) * vDotN * n.nx;
-    w.y -= (1 + restitution) * vDotN * n.ny;
-    // Súrlódás a tangensirányban
-    const tx = -n.ny, ty2 = n.nx;
-    const vDotT = (w.x - w.px) * tx + (w.y - w.py) * ty2;
-    const friction = 0.80;  // jó tapadás
-    w.x -= (1 - friction) * vDotT * tx;
-    w.y -= (1 - friction) * vDotT * ty2;
-  }
-  w.onGround = true;
-}
-
-function applyWheelbaseConstraint(a, b) {
-  // Merev rúd megkötés: a és b kerék távolsága = WHEELBASE
-  // Alacsony stiffness: nem szakad szét
-  for (let i = 0; i < CONSTRAINT_ITER; i++) {
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < 0.001) continue;
-    const diff = (dist - WHEELBASE) / dist * 0.25;  // alacsony
-    a.x += dx * diff;
-    a.y += dy * diff;
-    b.x -= dx * diff;
-    b.y -= dy * diff;
-  }
-}
-
-// ─── Truck állapot ────────────────────────────────────────────────────────────
-let rear, front;   // kerekek
-let wheelAngle = 0;
-let flipFrames = 0;
-let lives, score, level, frameCount, cameraX, animId, gameState;
-let flipWarning = 0;
-
-function resetTruck(startX) {
-  rear  = makeWheel(startX - WHEELBASE / 2, GROUND_Y - WHEEL_R);
-  front = makeWheel(startX + WHEELBASE / 2, GROUND_Y - WHEEL_R);
-}
-
-function truckAngle() {
-  return Math.atan2(front.y - rear.y, front.x - rear.x);
-}
-
-function truckCenter() {
-  return { x: (rear.x + front.x) / 2, y: (rear.y + front.y) / 2 };
-}
-
-function isFlipped() {
-  const a = truckAngle();
-  return Math.abs(a) > Math.PI * 0.62;  // >~112° a vízszintestől
-}
-
-// ─── Update ───────────────────────────────────────────────────────────────────
-let debugInfo = {};
-
-function updateTruck() {
-  // Motor erő – csak ha talajon van legalább az egyik kerék
-  let ax = 0;
-  if (keys['ArrowRight']) ax =  ENGINE_FORCE;
-  if (keys['ArrowLeft'])  ax = -ENGINE_FORCE * 0.75;
-
-  // Kerekek léptetése
-  stepWheel(rear,  ax * 0.6, 0);
-  stepWheel(front, ax * 0.4, 0);
-
-  // Terep ütközés
-  resolveWheelTerrain(rear);
-  resolveWheelTerrain(front);
-
-  // Megkötés (kerekek távolsága = WHEELBASE)
-  applyWheelbaseConstraint(rear, front);
-
-  // Terep ütközés még egyszer a megkötés után
-  resolveWheelTerrain(rear);
-  resolveWheelTerrain(front);
-
-  // Minimal safety clamp: csak nagyon mély penetráción segít
-  const rearTerrainY = getTerrainY(rear.x);
-  const frontTerrainY = getTerrainY(front.x);
-  const rearPen = (rear.y + WHEEL_R) - rearTerrainY;
-  const frontPen = (front.y + WHEEL_R) - frontTerrainY;
-
-  // Csak 10px+ penetráción, 30%-os erővel
-  if (rearPen > 10) {
-    const n = getTerrainNormal(rear.x);
-    rear.x -= n.nx * rearPen * 0.3;
-    rear.y -= n.ny * rearPen * 0.3;
-  }
-  if (frontPen > 10) {
-    const n = getTerrainNormal(front.x);
-    front.x -= n.nx * frontPen * 0.3;
-    front.y -= n.ny * frontPen * 0.3;
+    // Game loop
+    this.running = false;
+    this.setupEventHandlers();
   }
 
-  // Debug info
-  debugInfo = {
-    rearGround: rear.onGround,
-    frontGround: front.onGround,
-    motorForce: ax,
-    angle: (truckAngle() * 180 / Math.PI).toFixed(1)
-  };
-
-  // Keréknyom-forgás (vizuális)
-  const vx = (front.x - front.px + rear.x - rear.px) / 2;
-  wheelAngle += vx / WHEEL_R;
-
-  // Bukfenc detektálás
-  if (isFlipped()) {
-    flipFrames++;
-    flipWarning = 60;
-  } else {
-    flipFrames = Math.max(0, flipFrames - 2);
-  }
-  if (flipWarning > 0) flipWarning--;
-
-  if (flipFrames > 180) {  // 3 másodperc bukfencben
-    flipFrames = 0;
-    hit();
+  setupInput() {
+    document.addEventListener('keydown', (e) => {
+      this.keys[e.key] = true;
+      if (e.key === ' ' || e.key === 'Enter') {
+        if (this.gameState === 'start' || this.gameState === 'won' || this.gameState === 'lost') {
+          e.preventDefault();
+          this.startGame();
+        }
+      }
+    });
+    document.addEventListener('keyup', (e) => {
+      this.keys[e.key] = false;
+    });
   }
 
-  // Kamera
-  const target = truckCenter().x - W * 0.3;
-  cameraX += (target - cameraX) * 0.12;
-  cameraX = Math.max(0, cameraX);
-}
+  createTerrain() {
+    // Generate hilly terrain
+    const terrain = this.generateHillyTerrain();
 
-// ─── Pontszám / szint ─────────────────────────────────────────────────────────
-function updateScore() {
-  const dist = Math.round((truckCenter().x) / 8);
-  if (dist > score) {
-    score = dist;
-    document.getElementById('distance').textContent = score;
-    const newLevel = Math.floor(score / 200) + 1;
-    if (newLevel !== level) {
-      level = newLevel;
-      document.getElementById('level').textContent = level;
-      GameUtils.playTone(660, 0.18);
+    // Create static terrain body from vertices
+    const vertices = terrain.map(p => ({ x: p.x, y: p.y }));
+    this.terrainBody = Bodies.fromVertices(500, 0, [vertices], {
+      isStatic: true,
+      label: 'terrain',
+      friction: 0.8,
+      restitution: 0.2
+    });
+
+    World.add(this.world, this.terrainBody);
+  }
+
+  generateHillyTerrain() {
+    const points = [];
+    const width = 1200;
+    const baseY = 200;
+
+    // Procedural hills using sine waves
+    for (let x = 0; x <= width; x += 10) {
+      const y = baseY +
+        Math.sin(x * 0.01) * 30 +
+        Math.sin(x * 0.005) * 50 +
+        Math.sin(x * 0.0025) * 20;
+      points.push({ x, y });
     }
-  }
-  // Célba ért?
-  if (truckCenter().x >= FINISH_X) {
-    finishLevel();
-  }
-}
 
-// ─── Háttér rajz ─────────────────────────────────────────────────────────────
-const bgClouds = Array.from({length: 8}, (_, i) => ({
-  wx: i * 1100 + 200, y: 30 + Math.random() * 55,
-  r: 24 + Math.random() * 20, speed: 0.15 + Math.random() * 0.15
-}));
+    // Bottom boundary
+    points.push({ x: width, y: 400 });
+    points.push({ x: 0, y: 400 });
 
-function drawBg() {
-  // Égbolt
-  const sky = ctx.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, '#5ba3d9');
-  sky.addColorStop(1, '#c8e8ff');
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, W, H);
-
-  // Felhők (parallax: 30%-os scroll)
-  ctx.fillStyle = 'rgba(255,255,255,0.88)';
-  for (const c of bgClouds) {
-    const sx = c.wx - cameraX * 0.3;
-    ctx.beginPath();
-    ctx.arc(sx,          c.y,       c.r,       0, Math.PI * 2); ctx.fill();
-    ctx.arc(sx + c.r * 0.75, c.y + 6, c.r * 0.7, 0, Math.PI * 2); ctx.fill();
-    ctx.arc(sx - c.r * 0.6,  c.y + 8, c.r * 0.58,0, Math.PI * 2); ctx.fill();
-    // végtelen scroll
-    if (sx < -120) c.wx += 9500;
+    return points;
   }
 
-  // Háttér dombok (parallax 60%)
-  ctx.fillStyle = '#9dcc78';
-  ctx.beginPath();
-  ctx.moveTo(0, H);
-  for (let sx = 0; sx < W + 60; sx += 30) {
-    const wx = sx + cameraX * 0.6;
-    const hy = H - 60 - Math.sin(wx * 0.0038) * 40 - Math.sin(wx * 0.0091) * 25;
-    ctx.lineTo(sx, hy);
+  createTruck() {
+    const startX = 100;
+    const startY = 100;
+
+    // Chassis
+    this.chassis = Bodies.rectangle(startX, startY, this.TRUCK_WIDTH, this.TRUCK_HEIGHT, {
+      mass: 200,
+      friction: 0.3,
+      restitution: 0.1,
+      label: 'chassis'
+    });
+
+    // Wheels
+    this.rearWheel = Bodies.circle(startX - this.WHEELBASE / 2, startY + 30, this.WHEEL_RADIUS, {
+      mass: 40,
+      friction: 0.9,
+      restitution: 0.3,
+      label: 'wheel'
+    });
+
+    this.frontWheel = Bodies.circle(startX + this.WHEELBASE / 2, startY + 30, this.WHEEL_RADIUS, {
+      mass: 40,
+      friction: 0.9,
+      restitution: 0.3,
+      label: 'wheel'
+    });
+
+    World.add(this.world, [this.chassis, this.rearWheel, this.frontWheel]);
+
+    // Suspension
+    this.rearSuspension = Constraint.create({
+      bodyA: this.chassis,
+      bodyB: this.rearWheel,
+      pointA: { x: -this.WHEELBASE / 2, y: 20 },
+      pointB: { x: 0, y: 0 },
+      length: 50,
+      stiffness: 0.15,
+      damping: 0.08
+    });
+
+    this.frontSuspension = Constraint.create({
+      bodyA: this.chassis,
+      bodyB: this.frontWheel,
+      pointA: { x: this.WHEELBASE / 2, y: 20 },
+      pointB: { x: 0, y: 0 },
+      length: 50,
+      stiffness: 0.15,
+      damping: 0.08
+    });
+
+    World.add(this.world, [this.rearSuspension, this.frontSuspension]);
+
+    this.truckStartX = startX;
+    this.truckStartY = startY;
   }
-  ctx.lineTo(W, H);
-  ctx.closePath();
-  ctx.fill();
-}
 
-// ─── Terep rajz ───────────────────────────────────────────────────────────────
-function drawTerrain() {
-  const startI = Math.max(0, Math.floor(cameraX / TSTEP) - 2);
-  const endI   = Math.min(terrain.length - 1, startI + Math.ceil(W / TSTEP) + 4);
-
-  // Terep kitöltés
-  const grad = ctx.createLinearGradient(0, GROUND_Y - 80, 0, H);
-  grad.addColorStop(0, '#5a9e3f');
-  grad.addColorStop(0.12, '#4a8a34');
-  grad.addColorStop(1, '#3d6b28');
-  ctx.fillStyle = grad;
-
-  ctx.beginPath();
-  ctx.moveTo(terrain[startI].x - cameraX, H);
-  for (let i = startI; i <= endI; i++) {
-    ctx.lineTo(terrain[i].x - cameraX, terrain[i].y);
-  }
-  ctx.lineTo(terrain[endI].x - cameraX, H);
-  ctx.closePath();
-  ctx.fill();
-
-  // Fű csík
-  ctx.strokeStyle = '#6abf4b';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  for (let i = startI; i <= endI; i++) {
-    const sx = terrain[i].x - cameraX;
-    if (i === startI) ctx.moveTo(sx, terrain[i].y);
-    else ctx.lineTo(sx, terrain[i].y);
-  }
-  ctx.stroke();
-
-  // Szikla textúra (ismétlődő kövek)
-  ctx.fillStyle = '#7d5a3c';
-  for (let wx = Math.floor(cameraX / 80) * 80; wx < cameraX + W; wx += 80) {
-    const sy = getTerrainY(wx) + 8;
-    const sx = wx - cameraX;
-    ctx.beginPath();
-    ctx.ellipse(sx, sy, 14, 8, 0.3, 0, Math.PI * 2);
-    ctx.fill();
+  createFinish() {
+    this.finishX = 1000;
   }
 
-  // Célzászló
-  const fx = FINISH_X - cameraX;
-  if (fx > -20 && fx < W + 20) {
-    const fy = getTerrainY(FINISH_X) - 2;
-    ctx.fillStyle = '#555';
-    ctx.fillRect(fx - 2, fy - 80, 4, 80);
-    // sakktábla minta
-    for (let row = 0; row < 4; row++) {
-      for (let col = 0; col < 3; col++) {
-        ctx.fillStyle = (row + col) % 2 === 0 ? '#fff' : '#222';
-        ctx.fillRect(fx + col * 10, fy - 80 + row * 10, 10, 10);
+  startGame() {
+    this.gameState = 'playing';
+    this.running = true;
+    this.overlay.style.display = 'none';
+    this.statusBar.style.display = 'flex';
+    this.distance = 0;
+    this.lives = 3;
+
+    this.resetTruck();
+    this.update();
+  }
+
+  resetTruck() {
+    Body.setPosition(this.chassis, { x: this.truckStartX, y: this.truckStartY });
+    Body.setVelocity(this.chassis, { x: 0, y: 0 });
+    Body.setAngularVelocity(this.chassis, 0);
+
+    Body.setPosition(this.rearWheel, { x: this.truckStartX - this.WHEELBASE / 2, y: this.truckStartY + 30 });
+    Body.setVelocity(this.rearWheel, { x: 0, y: 0 });
+    Body.setAngularVelocity(this.rearWheel, 0);
+
+    Body.setPosition(this.frontWheel, { x: this.truckStartX + this.WHEELBASE / 2, y: this.truckStartY + 30 });
+    Body.setVelocity(this.frontWheel, { x: 0, y: 0 });
+    Body.setAngularVelocity(this.frontWheel, 0);
+  }
+
+  update() {
+    if (!this.running) return;
+
+    Engine.update(this.engine);
+
+    // Controls
+    const DRIVE_FORCE = 0.004;
+    const STEER_FORCE = 0.005;
+
+    if (this.keys['ArrowRight'] || this.keys['d']) {
+      Body.applyForce(this.rearWheel, this.rearWheel.position, { x: DRIVE_FORCE * 60, y: 0 });
+      Body.applyForce(this.frontWheel, this.frontWheel.position, { x: DRIVE_FORCE * 30, y: 0 });
+    }
+    if (this.keys['ArrowLeft'] || this.keys['a']) {
+      Body.applyForce(this.rearWheel, this.rearWheel.position, { x: -DRIVE_FORCE * 60, y: 0 });
+      Body.applyForce(this.frontWheel, this.frontWheel.position, { x: -DRIVE_FORCE * 30, y: 0 });
+    }
+    if (this.keys['ArrowUp'] || this.keys['w']) {
+      Body.rotate(this.chassis, -STEER_FORCE);
+    }
+    if (this.keys['ArrowDown'] || this.keys['s']) {
+      Body.rotate(this.chassis, STEER_FORCE);
+    }
+
+    // Distance tracking
+    this.distance = Math.max(0, Math.round((this.chassis.position.x - this.truckStartX) / 10));
+
+    // Check finish
+    if (this.chassis.position.x > this.finishX && this.gameState === 'playing') {
+      this.gameState = 'won';
+      this.running = false;
+      GameUtils.celebrate('Jól csináltad! 🎉', 0, () => this.showWin());
+    }
+
+    // Check if fallen
+    if (this.chassis.position.y > 400 || this.chassis.position.x < -100) {
+      this.lives--;
+      if (this.lives > 0) {
+        this.resetTruck();
+      } else {
+        this.gameState = 'lost';
+        this.running = false;
+        GameUtils.playError();
+        this.showGameOver();
       }
     }
+
+    // Camera follow
+    const targetCameraX = this.chassis.position.x - 150;
+    this.cameraX += (targetCameraX - this.cameraX) * 0.12;
+
+    this.draw();
+    this.updateUI();
+
+    if (this.running) {
+      requestAnimationFrame(() => this.update());
+    }
+  }
+
+  draw() {
+    // Clear
+    this.ctx.fillStyle = '#fff9f0';
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Camera transform
+    this.ctx.save();
+    this.ctx.translate(-this.cameraX, 0);
+
+    this.drawBackground();
+    this.drawTerrain();
+    this.drawTruck();
+    this.drawFinish();
+
+    this.ctx.restore();
+  }
+
+  drawBackground() {
+    // Sky
+    const gradient = this.ctx.createLinearGradient(0, 0, 0, 150);
+    gradient.addColorStop(0, '#87CEEB');
+    gradient.addColorStop(1, '#E0F6FF');
+    this.ctx.fillStyle = gradient;
+    this.ctx.fillRect(-500, -50, 2000, 150);
+
+    // Clouds parallax
+    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    const cloudX = (-this.cameraX * 0.3) % 400;
+    this.drawCloud(cloudX, 40, 60, 20);
+    this.drawCloud(cloudX + 200, 70, 70, 25);
+    this.drawCloud(cloudX - 200, 50, 50, 15);
+  }
+
+  drawCloud(x, y, w, h) {
+    this.ctx.beginPath();
+    this.ctx.arc(x, y, h / 2, 0, Math.PI * 2);
+    this.ctx.arc(x + w / 2, y - h / 4, h / 1.5, 0, Math.PI * 2);
+    this.ctx.arc(x + w, y, h / 2, 0, Math.PI * 2);
+    this.ctx.fill();
+  }
+
+  drawTerrain() {
+    const terrain = this.generateHillyTerrain();
+
+    this.ctx.fillStyle = '#8B7355';
+    this.ctx.beginPath();
+    this.ctx.moveTo(terrain[0].x, terrain[0].y);
+    terrain.forEach(p => this.ctx.lineTo(p.x, p.y));
+    this.ctx.closePath();
+    this.ctx.fill();
+
+    // Grass line
+    this.ctx.strokeStyle = '#228B22';
+    this.ctx.lineWidth = 3;
+    this.ctx.beginPath();
+    this.ctx.moveTo(terrain[0].x, terrain[0].y);
+    for (let i = 1; i < terrain.length - 2; i++) {
+      this.ctx.lineTo(terrain[i].x, terrain[i].y);
+    }
+    this.ctx.stroke();
+  }
+
+  drawTruck() {
+    const x = this.chassis.position.x;
+    const y = this.chassis.position.y;
+    const angle = this.chassis.angle;
+
+    this.ctx.save();
+    this.ctx.translate(x, y);
+    this.ctx.rotate(angle);
+
+    // Body
+    this.ctx.fillStyle = '#FF6B6B';
+    this.ctx.fillRect(-this.TRUCK_WIDTH / 2, -this.TRUCK_HEIGHT / 2, this.TRUCK_WIDTH, this.TRUCK_HEIGHT);
+
+    // Windows
+    this.ctx.fillStyle = 'rgba(100, 150, 200, 0.7)';
+    this.ctx.fillRect(-this.TRUCK_WIDTH / 2 + 5, -this.TRUCK_HEIGHT / 2 + 5, 15, 12);
+    this.ctx.fillRect(-5, -this.TRUCK_HEIGHT / 2 + 5, 15, 12);
+
+    this.ctx.restore();
+
+    // Wheels
+    this.drawWheel(this.rearWheel.position.x, this.rearWheel.position.y, this.rearWheel.angle);
+    this.drawWheel(this.frontWheel.position.x, this.frontWheel.position.y, this.frontWheel.angle);
+  }
+
+  drawWheel(x, y, angle) {
+    this.ctx.save();
+    this.ctx.translate(x, y);
+    this.ctx.rotate(angle);
+
+    // Tire
+    this.ctx.fillStyle = '#333';
+    this.ctx.beginPath();
+    this.ctx.arc(0, 0, this.WHEEL_RADIUS, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    // Rim
+    this.ctx.fillStyle = '#AAA';
+    this.ctx.beginPath();
+    this.ctx.arc(0, 0, this.WHEEL_RADIUS * 0.6, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    // Tread
+    this.ctx.strokeStyle = '#555';
+    this.ctx.lineWidth = 2;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const r = this.WHEEL_RADIUS * 0.8;
+      this.ctx.beginPath();
+      this.ctx.moveTo(Math.cos(a) * r * 0.6, Math.sin(a) * r * 0.6);
+      this.ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      this.ctx.stroke();
+    }
+
+    this.ctx.restore();
+  }
+
+  drawFinish() {
+    const x = this.finishX;
+    const y = 150;
+    const h = 100;
+
+    // Flag
+    this.ctx.fillStyle = '#FFD700';
+    this.ctx.fillRect(x - 10, y - h / 2, 20, h);
+
+    // Checkered
+    this.ctx.fillStyle = '#000';
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) {
+        if ((i + j) % 2 === 0) {
+          this.ctx.fillRect(x - 8 + i * 4, y - h / 2 + j * (h / 4), 4, h / 4);
+        }
+      }
+    }
+
+    // Pole
+    this.ctx.fillStyle = '#8B4513';
+    this.ctx.fillRect(x - 2, y - h / 2, 4, h);
+  }
+
+  updateUI() {
+    document.getElementById('lives').textContent = this.lives;
+    document.getElementById('distance').textContent = this.distance;
+    document.getElementById('level').textContent = this.level;
+  }
+
+  showWin() {
+    this.overlay.style.display = 'flex';
+    document.getElementById('overlay-emoji').textContent = '🎉';
+    document.getElementById('overlay-title').textContent = 'Sikerült!';
+    document.getElementById('overlay-sub').textContent = 'Éppen néhány méterrel több kellett volna...';
+    document.getElementById('action-btn').textContent = 'Következő Szint';
+  }
+
+  showGameOver() {
+    this.overlay.style.display = 'flex';
+    document.getElementById('overlay-emoji').textContent = '💥';
+    document.getElementById('overlay-title').textContent = 'Vége a játéknak!';
+    document.getElementById('overlay-sub').textContent = `Elérted ${this.distance} métert!`;
+    document.getElementById('action-btn').textContent = 'Újra!';
+  }
+
+  setupEventHandlers() {
+    document.getElementById('action-btn').addEventListener('click', () => {
+      if (this.gameState === 'won') {
+        this.level++;
+        this.finishX += 300;
+      }
+      this.startGame();
+    });
   }
 }
 
-// ─── Truck rajz ───────────────────────────────────────────────────────────────
-function drawWheel(w) {
-  const sx = w.x - cameraX;
-  const sy = w.y;
-  // Gumi
-  ctx.fillStyle = '#1a1a2e';
-  ctx.beginPath(); ctx.arc(sx, sy, WHEEL_R, 0, Math.PI * 2); ctx.fill();
-  // Futófelület bordák
-  ctx.strokeStyle = '#333';
-  ctx.lineWidth = 4;
-  for (let i = 0; i < 8; i++) {
-    const a = wheelAngle + i * Math.PI / 4;
-    ctx.beginPath();
-    ctx.arc(sx, sy, WHEEL_R, a, a + 0.35);
-    ctx.stroke();
-  }
-  // Felni
-  ctx.fillStyle = '#bdc3c7';
-  ctx.beginPath(); ctx.arc(sx, sy, WHEEL_R * 0.48, 0, Math.PI * 2); ctx.fill();
-  // Küllők
-  ctx.strokeStyle = '#95a5a6';
-  ctx.lineWidth = 3;
-  for (let i = 0; i < 5; i++) {
-    const a = wheelAngle + i * Math.PI * 2 / 5;
-    ctx.beginPath();
-    ctx.moveTo(sx + Math.cos(a) * 4, sy + Math.sin(a) * 4);
-    ctx.lineTo(sx + Math.cos(a) * WHEEL_R * 0.44, sy + Math.sin(a) * WHEEL_R * 0.44);
-    ctx.stroke();
-  }
-}
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+  window.game = new MonsterTruckGame();
 
-function drawTruck() {
-  const rx = rear.x  - cameraX;
-  const fx = front.x - cameraX;
-  const angle = Math.atan2(front.y - rear.y, front.x - rear.x);
-  const cx = (rx + fx) / 2;
-  const cy = (rear.y + front.y) / 2;
-
-  // DEBUG: velocity
-  const vx = (front.x - front.px + rear.x - rear.px) / 2;
-  const vy = (front.y - front.py + rear.y - rear.py) / 2;
-  const speed = Math.sqrt(vx * vx + vy * vy);
-
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(angle);
-
-  // Lengéscsillapítók
-  ctx.strokeStyle = '#7f8c8d';
-  ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.moveTo(-WHEELBASE/2, 0); ctx.lineTo(-WHEELBASE/2, -14); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo( WHEELBASE/2, 0); ctx.lineTo( WHEELBASE/2, -14); ctx.stroke();
-
-  // Alváz
-  ctx.fillStyle = '#c0392b';
-  ctx.beginPath();
-  ctx.roundRect(-WHEELBASE/2 - 8, -28, WHEELBASE + 16, 18, 4);
-  ctx.fill();
-  ctx.strokeStyle = '#922b21';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // Karosszéria
-  ctx.fillStyle = '#e74c3c';
-  ctx.beginPath();
-  ctx.roundRect(-WHEELBASE/2 - 4, -48, WHEELBASE + 8, 22, 6);
-  ctx.fill();
-
-  // Fülke
-  ctx.fillStyle = '#c0392b';
-  ctx.beginPath();
-  ctx.roundRect(-4, -70, WHEELBASE/2 + 4, 24, [6, 6, 0, 0]);
-  ctx.fill();
-
-  // Szélvédő
-  ctx.fillStyle = '#85c1e9';
-  ctx.globalAlpha = 0.75;
-  ctx.beginPath();
-  ctx.roundRect(0, -67, WHEELBASE/2 - 2, 18, 4);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-
-  // Kipufogó (hátul)
-  ctx.fillStyle = '#555';
-  ctx.fillRect(-WHEELBASE/2 - 14, -42, 10, 6);
-  ctx.fillStyle = '#888';
-  ctx.beginPath(); ctx.arc(-WHEELBASE/2 - 14, -36, 4, 0, Math.PI * 2); ctx.fill();
-
-  // Fényszórók (elöl)
-  ctx.fillStyle = '#f9e74c';
-  ctx.beginPath(); ctx.ellipse(WHEELBASE/2 + 8, -44, 5, 4, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = 'rgba(255,240,100,0.4)';
-  ctx.beginPath();
-  ctx.moveTo(WHEELBASE/2 + 12, -44);
-  ctx.lineTo(WHEELBASE/2 + 35, -54);
-  ctx.lineTo(WHEELBASE/2 + 35, -34);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.restore();
-
-  // Kerekek (camera-offset-tel)
-  drawWheel(rear);
-  drawWheel(front);
-
-  // Bukfenc figyelmeztetés
-  if (flipWarning > 0 && Math.floor(flipWarning / 8) % 2 === 0) {
-    ctx.font = 'bold 22px Nunito, sans-serif';
-    ctx.fillStyle = '#e74c3c';
-    ctx.textAlign = 'center';
-    ctx.fillText('⚠️ Megdől!', cx, rear.y - 60);
-  }
-
-  // DEBUG OUTPUT
-  ctx.font = '12px monospace';
-  ctx.fillStyle = '#222';
-  ctx.textAlign = 'left';
-  ctx.fillText(`Pos: ${truckCenter().x.toFixed(0)} | V: vx=${vx.toFixed(2)} vy=${vy.toFixed(2)} | Speed: ${speed.toFixed(3)}`, 10, 20);
-  ctx.fillText(`Ground: R=${debugInfo.rearGround ? '✓' : '✗'} F=${debugInfo.frontGround ? '✓' : '✗'} | Force: ${debugInfo.motorForce.toFixed(2)} | Angle: ${debugInfo.angle}°`, 10, 35);
-}
-
-// ─── Pálya díszítők ───────────────────────────────────────────────────────────
-function drawDecorations() {
-  // TEST TRACK LABELS
-  const labels = [
-    { x: 400, label: "Flat 1" },
-    { x: 1200, label: "↗ Up" },
-    { x: 2000, label: "Flat 2" },
-    { x: 2800, label: "↘ Down" },
-    { x: 3600, label: "Flat 3" }
-  ];
-
-  for (const {x, label} of labels) {
-    const sx = x - cameraX;
-    if (sx < -60 || sx > W + 60) continue;
-    const ty = getTerrainY(x) - 80;
-    ctx.font = 'bold 16px Nunito, sans-serif';
-    ctx.fillStyle = '#222';
-    ctx.textAlign = 'center';
-    ctx.fillText(label, sx, ty);
-  }
-
-  // Fák (hátul)
-  for (let wx = 400; wx < TERRAIN_LEN; wx += 350) {
-    const sx = wx - cameraX;
-    if (sx < -60 || sx > W + 60) continue;
-    const ty = getTerrainY(wx) - 2;
-    // törzs
-    ctx.fillStyle = '#6b4226';
-    ctx.fillRect(sx - 5, ty - 50, 10, 50);
-    // lombozat
-    ctx.fillStyle = '#27ae60';
-    ctx.beginPath(); ctx.arc(sx, ty - 65, 26, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#2ecc71';
-    ctx.beginPath(); ctx.arc(sx - 8, ty - 72, 18, 0, Math.PI * 2); ctx.fill();
-  }
-}
-
-// ─── Ütközés / életek ────────────────────────────────────────────────────────
-function hit() {
-  lives--;
-  document.getElementById('lives').textContent = lives;
-  GameUtils.playError();
-  if (lives <= 0) {
-    endGame();
-    return;
-  }
-  // Újraindítás az utolsó elért pozícióban
-  const spawnX = Math.max(200, truckCenter().x - 100);
-  invincibleFrames = 120;
-  resetTruck(spawnX);
-}
-
-let invincibleFrames = 0;
-
-function finishLevel() {
-  gameState = 'finished';
-  cancelAnimationFrame(animId);
-  GameUtils.celebrate(`🏁 Célba értél! ${score} méter!`, 3000);
-  setTimeout(() => {
-    showOverlay('🏆', 'Gratulálok!', `Teljesítetted a pályát!<br>Megtett távolság: <strong>${score} m</strong>`, 'Újra játszom');
-  }, 2500);
-}
-
-function endGame() {
-  gameState = 'gameover';
-  cancelAnimationFrame(animId);
-  setTimeout(() => {
-    showOverlay('💥', 'Játék vége!', `Megtett távolság: <strong>${score} m</strong><br>Próbáld újra!`, 'Újra játszom');
-  }, 400);
-}
-
-// ─── Game loop ────────────────────────────────────────────────────────────────
-function loop() {
-  if (gameState !== 'playing') return;
-  frameCount++;
-  if (invincibleFrames > 0) invincibleFrames--;
-
-  drawBg();
-  drawDecorations();
-  drawTerrain();
-  updateTruck();
-  drawTruck();
-  updateScore();
-
-  animId = requestAnimationFrame(loop);
-}
-
-// ─── Overlay ─────────────────────────────────────────────────────────────────
-const overlay   = document.getElementById('overlay');
-const btnAction = document.getElementById('action-btn');
-
-function showOverlay(emoji, title, sub, btnText) {
-  document.getElementById('overlay-emoji').textContent = emoji;
-  document.getElementById('overlay-title').textContent = title;
-  document.getElementById('overlay-sub').innerHTML = sub;
-  btnAction.textContent = btnText;
-  overlay.classList.remove('hidden');
-}
-
-function startGame() {
-  cancelAnimationFrame(animId);
-  buildTerrain();
-  lives = 3; score = 0; level = 1; frameCount = 0;
-  cameraX = 0; flipFrames = 0; flipWarning = 0; invincibleFrames = 60;
-  document.getElementById('lives').textContent = 3;
-  document.getElementById('distance').textContent = 0;
-  document.getElementById('level').textContent = 1;
-  resetTruck(160);
-  overlay.classList.add('hidden');
-  gameState = 'playing';
-  loop();
-}
-
-btnAction.addEventListener('click', startGame);
-window.addEventListener('keydown', e => {
-  if (e.key === ' ' && (gameState === 'idle' || gameState === 'gameover' || gameState === 'finished')) startGame();
+  const overlay = document.getElementById('overlay');
+  overlay.style.display = 'flex';
+  document.getElementById('overlay-emoji').textContent = '🚛';
+  document.getElementById('overlay-title').textContent = 'Monster Truck Kaland';
+  document.getElementById('overlay-sub').textContent = 'Nyomj jobbra/balra nyílat a vezetéshez. Érj el a célhoz!';
+  document.getElementById('action-btn').textContent = 'Kezdés!';
+  document.getElementById('action-btn').addEventListener('click', () => window.game.startGame());
 });
-
-showOverlay('🚛', 'Monster Truck Kaland', `Vezérelje a szörnyeteget az akadálypályán!<br>⬅ visszafelé · ➡ előre<br><small style="opacity:0.6">v${VERSION}</small>`, 'Indítás!');
-gameState = 'idle';

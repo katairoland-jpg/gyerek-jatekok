@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
-//  Palota Kaland — Prince of Persia stílusú platformer
-//  Mozgó platformok, csapdák, fal-kapaszkodás, időzített kihívások
+//  Kislány Palotája — Prince of Persia stílusú platformer, cute girl verzió
+//  Mozgó platformok, csapdák, fal-kapaszkodás, időkorlát, szintek
 // ═══════════════════════════════════════════════════════════════════════════
 
 const canvas = document.getElementById('gameCanvas');
@@ -17,11 +17,15 @@ const JUMP_FORCE = -12;
 const WALK_SPEED = 5;
 const CLIMB_SPEED = 2.5;
 
+// Time limit per level (in frames, 60fps)
+const TIME_LIMIT = 4 * 60 * 60;  // 4 perc = 14400 frame
+
 // ─── Játék állapot ───────────────────────────────────────────────────────────
 let state = 'idle';
 let lives = 3;
 let level = 1;
 let frameCount = 0;
+let levelFrameCount = 0;
 let invincible = 0;
 let cameraX = 0;
 let animId;
@@ -137,7 +141,7 @@ const girl = {
   }
 };
 
-// ─── Rajzolás (átmásolt az előző játékból) ────────────────────────────────────
+// ─── Rajzolás (cute girl) ────────────────────────────────────────────────────
 function drawGirl(x, ground, walkFrame, jumping, facingLeft) {
   const py = ground;
   const dir = facingLeft ? -1 : 1;
@@ -212,15 +216,13 @@ function generateLevel() {
   platforms.push({ x: 0, y: 180, w: 200 });
 
   nextSpawnX = 220;
-
-  // Szintek progresszívabb
   const levelDifficulty = Math.min(level, 5);
 
   for (let i = 0; i < 20 + levelDifficulty * 5; i++) {
     spawnNextSection(levelDifficulty);
   }
 
-  // Végcél
+  // Végcél — királyné szobája
   goalPlatform = {
     x: nextSpawnX + 300,
     y: 160,
@@ -300,7 +302,6 @@ function getGroundAt(x) {
 function checkPlatformCollisions(g, prevY) {
   const gb = g.bbox();
 
-  // Normál platformok
   for (const p of platforms) {
     if (gb.x + gb.w < p.x || gb.x > p.x + p.w) continue;
     if (prevY + g.h <= p.y + 5 && g.y + g.h >= p.y && g.vy >= 0) {
@@ -311,7 +312,6 @@ function checkPlatformCollisions(g, prevY) {
     }
   }
 
-  // Mozgó platformok
   for (const mp of movingPlatforms) {
     if (gb.x + gb.w < mp.x || gb.x > mp.x + mp.w) continue;
     if (prevY + g.h <= mp.y + 5 && g.y + g.h >= mp.y && g.vy >= 0) {
@@ -386,7 +386,6 @@ function drawBackground() {
 }
 
 function drawPlatforms() {
-  // Normál platformok
   for (const p of platforms) {
     const sx = p.x - cameraX;
     if (sx + p.w < 0 || sx > W) continue;
@@ -396,14 +395,12 @@ function drawPlatforms() {
     ctx.fillStyle = '#7f8c8d';
     ctx.fillRect(sx, p.y - 4, p.w, 4);
 
-    // Kötél szegélyek
     ctx.strokeStyle = '#34495e';
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(sx, p.y); ctx.lineTo(sx, p.y - 8); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(sx + p.w, p.y); ctx.lineTo(sx + p.w, p.y - 8); ctx.stroke();
   }
 
-  // Mozgó platformok
   for (const mp of movingPlatforms) {
     const sx = mp.x - cameraX;
     if (sx + mp.w < 0 || sx > W) continue;
@@ -413,14 +410,13 @@ function drawPlatforms() {
     ctx.fillStyle = '#c0392b';
     ctx.fillRect(sx, mp.y - 4, mp.w, 4);
 
-    // Nyíl jelzés
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 14px Arial';
     ctx.textAlign = 'center';
     ctx.fillText(mp.dir > 0 ? '→' : '←', sx + mp.w / 2, mp.y - 10);
   }
 
-  // Végcél
+  // Végcél — királyné szobája
   if (goalPlatform) {
     const sx = goalPlatform.x - cameraX;
     if (sx + goalPlatform.w > 0 && sx < W) {
@@ -429,7 +425,6 @@ function drawPlatforms() {
       ctx.fillStyle = '#f39c12';
       ctx.fillRect(sx, goalPlatform.y - 6, goalPlatform.w, 6);
 
-      // Korona szimbólum
       ctx.fillStyle = '#e74c3c';
       ctx.font = 'bold 20px Arial';
       ctx.textAlign = 'center';
@@ -443,7 +438,6 @@ function drawTraps() {
     const sx = t.x - cameraX;
 
     if (t.type === 'spikes') {
-      // Szöges csapda
       ctx.fillStyle = '#7f8c8d';
       for (let i = 0; i < 3; i++) {
         const px = sx - 20 + i * 20;
@@ -465,7 +459,6 @@ function drawTraps() {
       }
 
       if (t.active) {
-        // Nyíl
         ctx.strokeStyle = '#c0392b';
         ctx.lineWidth = 3;
         ctx.beginPath();
@@ -473,7 +466,6 @@ function drawTraps() {
         ctx.lineTo(sx + 10, t.y + 60);
         ctx.stroke();
 
-        // Nyílhegy
         ctx.fillStyle = '#c0392b';
         ctx.beginPath();
         ctx.moveTo(sx + 12, t.y + 60);
@@ -494,7 +486,6 @@ function drawClimbObjects() {
     ctx.fillStyle = '#8B4513';
     ctx.fillRect(sx - c.w / 2, c.y, c.w, c.h);
 
-    // Kötél csíkok
     ctx.strokeStyle = '#d4a96a';
     ctx.lineWidth = 2;
     for (let cy = c.y; cy < c.y + c.h; cy += 14) {
@@ -503,6 +494,22 @@ function drawClimbObjects() {
       ctx.lineTo(sx + c.w / 2, cy);
       ctx.stroke();
     }
+  }
+}
+
+// ─── UI — Időkorlát kijelzés ────────────────────────────────────────────────
+function drawTimeLimit() {
+  const timeLeft = TIME_LIMIT - levelFrameCount;
+  const minutes = Math.floor(timeLeft / 60 / 60);
+  const seconds = Math.floor((timeLeft / 60) % 60);
+
+  ctx.fillStyle = timeLeft < 600 ? '#e74c3c' : '#2c3e50';
+  ctx.font = 'bold 20px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText(`⏱ ${minutes}:${seconds.toString().padStart(2, '0')}`, 10, 30);
+
+  if (timeLeft <= 0) {
+    endGame();
   }
 }
 
@@ -526,6 +533,7 @@ function updateCamera() {
 function loop() {
   if (state !== 'playing') return;
   frameCount++;
+  levelFrameCount++;
 
   drawBackground();
   drawPlatforms();
@@ -539,6 +547,7 @@ function loop() {
 
   updateMovingPlatforms();
   updateCamera();
+  drawTimeLimit();
 
   animId = requestAnimationFrame(loop);
 }
@@ -592,6 +601,7 @@ function startGame() {
 
   lives = 3;
   frameCount = 0;
+  levelFrameCount = 0;
   invincible = 0;
   cameraX = 0;
 
@@ -623,7 +633,7 @@ function showOverlay(emoji, title, sub, btnText) {
 }
 
 btnAction.addEventListener('click', startGame);
-showOverlay('🏰', 'Palota Kaland', 'Segítsd a kislányt a palotán keresztül!<br>Ugorj, mászsz, és kerüld a csapdákat!', 'Játék indítása');
+showOverlay('🏰', '👑 Kislány Palotája 👑', 'Segítsd a kislányt a királyné szobájáig!<br>Ugorj, mászsz, kerüld a csapdákat, és szalad az idő!', 'Játék indítása');
 
 window.addEventListener('keydown', e => {
   if (e.key === ' ' && state === 'idle') startGame();

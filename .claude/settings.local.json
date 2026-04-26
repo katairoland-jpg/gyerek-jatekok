@@ -31,7 +31,10 @@
       "Bash(cmake --install build --prefix /Users/judit/Developer/X-Moto/install)",
       "Bash(/Users/judit/Developer/X-Moto/install/bin/xmoto:*)",
       "Bash(python3 generate_truck_textures.py)",
-      "Bash(pip3 install:*)"
+      "Bash(pip3 install:*)",
+      "Bash(cmake --install build --prefix install)",
+      "Bash(ls:*)",
+      "Bash(cp:*)"
     ]
   }
 }
